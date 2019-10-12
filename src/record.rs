@@ -21,7 +21,7 @@ use crate::traits::Reclaim;
 #[derive(Debug, Default, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Record<T, R: Reclaim> {
     /// The record's header
-    header: R::RecordHeader,
+    header: R::Header,
     /// The record's wrapped (inner) element
     elem: T,
 }
@@ -32,21 +32,18 @@ impl<T, R: Reclaim> Record<T, R> {
     /// Creates a new record with the specified `elem` and a default header.
     #[inline]
     pub fn new(elem: T) -> Self {
-        Self {
-            header: Default::default(),
-            elem,
-        }
+        Self { header: Default::default(), elem }
     }
 
     /// Creates a new record with the specified `elem` and `header`.
     #[inline]
-    pub fn with_header(elem: T, header: R::RecordHeader) -> Self {
+    pub fn with_header(elem: T, header: R::Header) -> Self {
         Self { header, elem }
     }
 
     /// Returns a reference to the record's header.
     #[inline]
-    pub fn header(&self) -> &R::RecordHeader {
+    pub fn header(&self) -> &R::Header {
         &self.header
     }
 
@@ -95,7 +92,7 @@ impl<T, R: Reclaim> Record<T, R> {
     /// Otherwise, the pointer arithmetic used to calculate the header's address
     /// will be incorrect and lead to undefined behavior.
     #[inline]
-    pub unsafe fn header_from_raw<'a>(elem: *mut T) -> &'a R::RecordHeader {
+    pub unsafe fn header_from_raw<'a>(elem: *mut T) -> &'a R::Header {
         let header = (elem as usize) - Self::offset_elem() + Self::offset_header();
         &*(header as *mut _)
     }
@@ -110,7 +107,7 @@ impl<T, R: Reclaim> Record<T, R> {
     /// Otherwise, the pointer arithmetic used to calculate the header's address
     /// will be incorrect and lead to undefined behavior.
     #[inline]
-    pub unsafe fn header_from_raw_non_null<'a>(elem: NonNull<T>) -> &'a R::RecordHeader {
+    pub unsafe fn header_from_raw_non_null<'a>(elem: NonNull<T>) -> &'a R::Header {
         let header = (elem.as_ptr() as usize) - Self::offset_elem() + Self::offset_header();
         &*(header as *mut _)
     }
@@ -119,12 +116,12 @@ impl<T, R: Reclaim> Record<T, R> {
     /// field.
     #[inline]
     pub fn offset_header() -> usize {
-        // FIXME: the offset_of! macro is unsound, this allows at least avoiding using it
-        //        in many cases until a better solution becomes available
-        // https://internals.rust-lang.org/t/pre-rfc-add-a-new-offset-of-macro-to-core-mem/9273
-        if mem::size_of::<R::RecordHeader>() == 0 {
+        if mem::size_of::<R::Header>() == 0 {
             0
         } else {
+            // FIXME:
+            //  the offset_of! macro is unsound, replace once a sound alternative becomes available
+            //  https://internals.rust-lang.org/t/pre-rfc-add-a-new-offset-of-macro-to-core-mem/9273
             offset_of!(Self, header)
         }
     }
@@ -133,12 +130,12 @@ impl<T, R: Reclaim> Record<T, R> {
     /// field.
     #[inline]
     pub fn offset_elem() -> usize {
-        // FIXME: the offset_of! macro is currently, this allows at least avoiding using it
-        //        in many cases until a better solution becomes available
-        // https://internals.rust-lang.org/t/pre-rfc-add-a-new-offset-of-macro-to-core-mem/9273
-        if mem::size_of::<R::RecordHeader>() == 0 {
+        if mem::size_of::<R::Header>() == 0 {
             0
         } else {
+            // FIXME:
+            //  the offset_of! macro is unsound, replace once a sound alternative becomes available
+            //  https://internals.rust-lang.org/t/pre-rfc-add-a-new-offset-of-macro-to-core-mem/9273
             offset_of!(Self, elem)
         }
     }

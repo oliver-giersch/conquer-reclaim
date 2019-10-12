@@ -2,6 +2,9 @@ pub mod prelude {
     pub use crate::traits::Reclaim;
 }
 
+#[macro_use]
+mod internal;
+
 mod atomic;
 mod record;
 mod retired;
@@ -18,7 +21,7 @@ use core::marker::PhantomData;
 pub use conquer_pointer;
 pub use conquer_pointer::typenum;
 
-use conquer_pointer::MarkedNonNull;
+use conquer_pointer::{MarkedNonNull, MarkedOption};
 use typenum::Unsigned;
 
 use crate::traits::Reclaim;
@@ -96,3 +99,19 @@ pub struct Unprotected<T, R, N> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<R>,
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// NotEqualError
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// TODO: Docs...
+#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct NotEqualError(());
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// AcquireResult
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Result type for [`acquire_if_equal`][crate::traits::Protect::acquire_if_equal]
+/// operations.
+pub type AcquireResult<'g, T, R, N> = Result<MarkedOption<Shared<'g, T, R, N>>, NotEqualError>;
