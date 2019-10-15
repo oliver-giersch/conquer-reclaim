@@ -33,7 +33,7 @@ impl<T, R: Reclaim, N: Unsigned> ReclaimPointer for Shared<'_, T, R, N> {
 /********** impl inherent *************************************************************************/
 
 impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
-    // impl_inherent!(shared)
+    impl_common!();
 
     /// Consumes and decomposes the [`Shared`] reference, returning only the
     /// reference itself.

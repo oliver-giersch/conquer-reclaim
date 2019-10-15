@@ -1,11 +1,12 @@
 mod compare;
 mod guard;
 
+use core::fmt;
 use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{AtomicMarkedPtr, MarkedNonNull, MarkedOption, MarkedPtr};
+use conquer_pointer::{AtomicMarkedPtr, MarkedOption, MarkedPtr};
 use typenum::Unsigned;
 
 pub use self::compare::CompareAndSwap;
@@ -39,7 +40,7 @@ pub struct Atomic<T, R, N> {
 unsafe impl<T, R: Reclaim, N: Unsigned> Send for Atomic<T, R, N> where T: Send + Sync {}
 unsafe impl<T, R: Reclaim, N: Unsigned> Sync for Atomic<T, R, N> where T: Send + Sync {}
 
-/********** impl inherent *************************************************************************/
+/********** impl inherent (const) *****************************************************************/
 
 impl<T, R, N> Atomic<T, R, N> {
     /// Creates a new `null` pointer.
@@ -55,12 +56,28 @@ impl<T, R, N> Atomic<T, R, N> {
     }
 }
 
+/********** impl inherent *************************************************************************/
+
 impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     /// Allocates a new [`Owned`] containing the given `val` and immediately
     /// storing it an `Atomic`.
     #[inline]
     pub fn new(val: T) -> Self {
         Self::from(Owned::from(val))
+    }
+
+    /// TODO: Docs...
+    #[inline]
+    pub fn get_mut(&mut self) -> Option<&mut T> {
+        unsafe { self.inner.load(Ordering::Relaxed).as_mut() }
+    }
+
+    /// TODO: Docs...    
+    #[inline]
+    pub fn into_owned(self) -> Option<Owned<T, R, N>> {
+        MarkedOption::from(self.inner.load(Ordering::Relaxed))
+            .map(|ptr| Owned { inner: ptr, _marker: PhantomData })
+            .value()
     }
 
     /// Creates a new [`Atomic`] from the given `ptr`.
@@ -143,7 +160,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
         &self,
         order: Ordering,
     ) -> MarkedOption<Unprotected<T, R, N>> {
-        MarkedNonNull::from_marked_ptr(self.inner.load(order))
+        MarkedOption::from(self.inner.load(order))
             .map(|ptr| Unprotected { inner: ptr, _marker: PhantomData })
     }
 
@@ -194,7 +211,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn load_marked_option<'g>(
         &self,
-        guard: impl GuardRef<'g>,
+        guard: impl GuardRef<'g, Reclaimer = R>,
         order: Ordering,
     ) -> MarkedOption<Shared<'g, T, R, N>> {
         guard.load_protected(self, order)
@@ -218,7 +235,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn load<'g>(
         &self,
-        guard: impl GuardRef<'g>,
+        guard: impl GuardRef<'g, Reclaimer = R>,
         order: Ordering,
     ) -> Option<Shared<'g, T, R, N>> {
         self.load_marked_option(guard, order).value()
@@ -310,16 +327,16 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
         failure: Ordering,
     ) -> Result<C::Success, CompareExchangeError<C, I>>
     where
-        C: CompareAndSwap,
+        C: CompareAndSwap<Item = T, Reclaimer = R, MarkBits = N>,
         I: ReclaimPointer<Item = T, Reclaimer = R, MarkBits = N>,
     {
-        let current = ManuallyDrop::new(current);
+        let new = ManuallyDrop::new(new);
         self.inner
-            .compare_exchange(current.as_marked_ptr(), new.into_marked_ptr(), success, failure)
+            .compare_exchange(current.into_marked_ptr(), new.as_marked_ptr(), success, failure)
             .map(|ptr| unsafe { <C::Success as ReclaimPointer>::from_marked_ptr(ptr) })
             .map_err(|ptr| CompareExchangeError {
                 loaded: unsafe { <C::Failure as ReclaimPointer>::from_marked_ptr(ptr) },
-                input: ManuallyDrop::into_inner(current),
+                input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
     }
@@ -333,18 +350,53 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
         failure: Ordering,
     ) -> Result<C::Success, CompareExchangeError<C, I>>
     where
-        C: CompareAndSwap,
+        C: CompareAndSwap<Item = T, Reclaimer = R, MarkBits = N>,
         I: ReclaimPointer<Item = T, Reclaimer = R, MarkBits = N>,
     {
-        let current = ManuallyDrop::new(current);
+        let new = ManuallyDrop::new(new);
         self.inner
-            .compare_exchange_weak(current.as_marked_ptr(), new.into_marked_ptr(), success, failure)
+            .compare_exchange_weak(current.into_marked_ptr(), new.as_marked_ptr(), success, failure)
             .map(|ptr| unsafe { <C::Success as ReclaimPointer>::from_marked_ptr(ptr) })
             .map_err(|ptr| CompareExchangeError {
                 loaded: unsafe { <C::Failure as ReclaimPointer>::from_marked_ptr(ptr) },
-                input: ManuallyDrop::into_inner(current),
+                input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
+    }
+
+    #[inline]
+    pub fn take(&mut self) -> Option<Owned<T, R, N>> {
+        MarkedOption::from(self.inner.swap(MarkedPtr::null(), Ordering::Relaxed))
+            .map(|ptr| Owned { inner: ptr, _marker: PhantomData })
+            .value()
+    }
+}
+
+/********** impl Default **************************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> Default for Atomic<T, R, N> {
+    #[inline]
+    fn default() -> Self {
+        Self::null()
+    }
+}
+
+/********** impl Debug ****************************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (ptr, tag) = self.inner.load(Ordering::SeqCst).decompose();
+        f.debug_struct("Atomic").field("ptr", &ptr).field("tag", &tag).finish()
+    }
+}
+
+/********** impl Pointer **************************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&self.inner.load(Ordering::SeqCst), f)
     }
 }
 
