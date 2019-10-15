@@ -391,6 +391,15 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
     }
 }
 
+/********** impl From *****************************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Atomic<T, R, N> {
+    #[inline]
+    fn from(owned: Owned<T, R, N>) -> Self {
+        Self { inner: AtomicMarkedPtr::from(Owned::into_marked_ptr(owned)), _marker: PhantomData }
+    }
+}
+
 /********** impl Pointer **************************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {

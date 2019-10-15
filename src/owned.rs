@@ -5,9 +5,16 @@ use conquer_pointer::NonNullable;
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
+use crate::internal::Internal;
 use crate::record::Record;
-use crate::traits::Reclaim;
+use crate::traits::{Reclaim, ReclaimPointer};
 use crate::Owned;
+
+/********** impl ReclaimPointer *******************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> ReclaimPointer for Owned<T, R, N> {
+    impl_reclaim_pointer!();
+}
 
 /********** impl Drop *****************************************************************************/
 
@@ -50,3 +57,7 @@ impl<T, R: Reclaim, N: Unsigned> NonNullable for Owned<T, R, N> {
         self.inner.decompose_non_null()
     }
 }
+
+/********** impl Internal *************************************************************************/
+
+impl<T, R, N> Internal for Owned<T, R, N> {}
