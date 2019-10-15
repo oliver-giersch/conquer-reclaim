@@ -24,7 +24,7 @@ impl<T, R, N> Clone for Shared<'_, T, R, N> {
 
 impl<T, R, N> Copy for Shared<'_, T, R, N> {}
 
-/********** impl ReclaimPoiner ********************************************************************/
+/********** impl ReclaimPointer *******************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned> ReclaimPointer for Shared<'_, T, R, N> {
     impl_reclaim_pointer!();
@@ -131,22 +131,7 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
 /********** impl NonNullable **********************************************************************/
 
 impl<T, R, N: Unsigned> NonNullable for Shared<'_, T, R, N> {
-    type Item = T;
-
-    #[inline]
-    fn as_const_ptr(&self) -> *const Self::Item {
-        self.inner.decompose_ptr() as *const _
-    }
-
-    #[inline]
-    fn as_mut_ptr(&self) -> *mut Self::Item {
-        self.inner.decompose_ptr()
-    }
-
-    #[inline]
-    fn as_non_null(&self) -> NonNull<Self::Item> {
-        self.inner.decompose_non_null()
-    }
+    impl_non_nullable!();
 }
 
 /********** impl Internal *************************************************************************/
