@@ -114,6 +114,6 @@ pub struct NotEqualError(());
 // AcquireResult
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Result type for [`acquire_if_equal`][crate::traits::Protect::acquire_if_equal]
-/// operations.
+/// Result type the [`acquire_if_equal`][crate::traits::Protect::acquire_if_equal]
+/// trait method.
 pub type AcquireResult<'g, T, R, N> = Result<MarkedOption<Shared<'g, T, R, N>>, NotEqualError>;

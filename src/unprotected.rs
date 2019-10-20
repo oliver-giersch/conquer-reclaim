@@ -1,9 +1,10 @@
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use conquer_pointer::NonNullable;
+use conquer_pointer::{MarkedOption, NonNullable};
 use typenum::Unsigned;
 
+use crate::internal::Internal;
 use crate::Unprotected;
 
 /********** impl Clone ****************************************************************************/
@@ -22,20 +23,11 @@ impl<T, R, N> Copy for Unprotected<T, R, N> {}
 /********** impl NonNullable **********************************************************************/
 
 impl<T, R, N: Unsigned> NonNullable for Unprotected<T, R, N> {
-    type Item = T;
-
-    #[inline]
-    fn as_const_ptr(&self) -> *const Self::Item {
-        self.inner.decompose_ptr() as *const _
-    }
-
-    #[inline]
-    fn as_mut_ptr(&self) -> *mut Self::Item {
-        self.inner.decompose_ptr()
-    }
-
-    #[inline]
-    fn as_non_null(&self) -> NonNull<Self::Item> {
-        self.inner.decompose_non_null()
-    }
+    impl_non_nullable!();
 }
+
+/********** impl Internal *************************************************************************/
+
+impl<T, R, N: Unsigned> Internal for Unprotected<T, R, N> {}
+impl<T, R, N: Unsigned> Internal for Option<Unprotected<T, R, N>> {}
+impl<T, R, N: Unsigned> Internal for MarkedOption<Unprotected<T, R, N>> {}

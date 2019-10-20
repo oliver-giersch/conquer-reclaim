@@ -1,11 +1,18 @@
 use core::ptr::NonNull;
 
-use conquer_pointer::NonNullable;
+use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 use typenum::Unsigned;
 
+use crate::internal::Internal;
 use crate::retired::Retired;
-use crate::traits::{Reclaim, ReclaimHandle};
+use crate::traits::{Reclaim, ReclaimHandle, SharedPointer};
 use crate::Unlinked;
+
+/********** impl SharedPointer *******************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> SharedPointer for Unlinked<T, R, N> {
+    impl_shared_pointer!();
+}
 
 /********** impl inherent *************************************************************************/
 
@@ -27,23 +34,18 @@ impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
     }
 }
 
+/********** impl MarkedNonNullable ****************************************************************/
+
+impl<T, R, N: Unsigned> MarkedNonNullable for Unlinked<T, R, N> {
+    impl_marked_non_nullable!();
+}
+
 /********** impl NonNullable **********************************************************************/
 
 impl<T, R, N: Unsigned> NonNullable for Unlinked<T, R, N> {
-    type Item = T;
-
-    #[inline]
-    fn as_const_ptr(&self) -> *const Self::Item {
-        self.inner.decompose_ptr() as *const _
-    }
-
-    #[inline]
-    fn as_mut_ptr(&self) -> *mut Self::Item {
-        self.inner.decompose_ptr()
-    }
-
-    #[inline]
-    fn as_non_null(&self) -> NonNull<Self::Item> {
-        self.inner.decompose_non_null()
-    }
+    impl_non_nullable!();
 }
+
+/********** impl Internal *************************************************************************/
+
+impl<T, R, N: Unsigned> Internal for Unlinked<T, R, N> {}

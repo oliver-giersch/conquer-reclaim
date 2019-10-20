@@ -12,7 +12,7 @@ use typenum::Unsigned;
 pub use self::compare::CompareAndSwap;
 pub use self::guard::GuardRef;
 
-use crate::traits::{Reclaim, ReclaimPointer};
+use crate::traits::{Reclaim, SharedPointer};
 use crate::{Owned, Shared, Unlinked, Unprotected};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -261,7 +261,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn store(
         &self,
-        ptr: impl ReclaimPointer<Item = T, MarkBits = N, Reclaimer = R>,
+        ptr: impl SharedPointer<Item = T, MarkBits = N, Reclaimer = R>,
         order: Ordering,
     ) {
         self.inner.store(ptr.into_marked_ptr(), order);
@@ -286,7 +286,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn swap_marked_option(
         &self,
-        ptr: impl ReclaimPointer<Item = T, Reclaimer = R, MarkBits = N>,
+        ptr: impl SharedPointer<Item = T, Reclaimer = R, MarkBits = N>,
         order: Ordering,
     ) -> MarkedOption<Unlinked<T, R, N>> {
         let prev = self.inner.swap(ptr.into_marked_ptr(), order);
@@ -312,7 +312,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn swap(
         &self,
-        ptr: impl ReclaimPointer<Item = T, Reclaimer = R, MarkBits = N>,
+        ptr: impl SharedPointer<Item = T, Reclaimer = R, MarkBits = N>,
         order: Ordering,
     ) -> Option<Unlinked<T, R, N>> {
         self.swap_marked_option(ptr, order).value()
@@ -328,14 +328,14 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     ) -> Result<C::Success, CompareExchangeError<C, I>>
     where
         C: CompareAndSwap<Item = T, Reclaimer = R, MarkBits = N>,
-        I: ReclaimPointer<Item = T, Reclaimer = R, MarkBits = N>,
+        I: SharedPointer<Item = T, Reclaimer = R, MarkBits = N>,
     {
         let new = ManuallyDrop::new(new);
         self.inner
             .compare_exchange(current.into_marked_ptr(), new.as_marked_ptr(), success, failure)
-            .map(|ptr| unsafe { <C::Success as ReclaimPointer>::from_marked_ptr(ptr) })
+            .map(|ptr| unsafe { <C::Success as SharedPointer>::from_marked_ptr(ptr) })
             .map_err(|ptr| CompareExchangeError {
-                loaded: unsafe { <C::Failure as ReclaimPointer>::from_marked_ptr(ptr) },
+                loaded: unsafe { <C::Failure as SharedPointer>::from_marked_ptr(ptr) },
                 input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
@@ -351,14 +351,14 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     ) -> Result<C::Success, CompareExchangeError<C, I>>
     where
         C: CompareAndSwap<Item = T, Reclaimer = R, MarkBits = N>,
-        I: ReclaimPointer<Item = T, Reclaimer = R, MarkBits = N>,
+        I: SharedPointer<Item = T, Reclaimer = R, MarkBits = N>,
     {
         let new = ManuallyDrop::new(new);
         self.inner
             .compare_exchange_weak(current.into_marked_ptr(), new.as_marked_ptr(), success, failure)
-            .map(|ptr| unsafe { <C::Success as ReclaimPointer>::from_marked_ptr(ptr) })
+            .map(|ptr| unsafe { <C::Success as SharedPointer>::from_marked_ptr(ptr) })
             .map_err(|ptr| CompareExchangeError {
-                loaded: unsafe { <C::Failure as ReclaimPointer>::from_marked_ptr(ptr) },
+                loaded: unsafe { <C::Failure as SharedPointer>::from_marked_ptr(ptr) },
                 input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
@@ -419,7 +419,7 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {
 pub struct CompareExchangeError<C, I>
 where
     C: CompareAndSwap,
-    I: ReclaimPointer,
+    I: SharedPointer,
 {
     /// The actually loaded value
     pub loaded: C::Failure,

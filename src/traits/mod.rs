@@ -1,13 +1,15 @@
+mod imp;
+
 use core::ops::Deref;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{MarkedNonNull, MarkedOption, MarkedPtr, NonNullable};
+use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedOption, MarkedPtr};
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
 use crate::internal::Internal;
 use crate::retired::Retired;
-use crate::{NotEqualError, Shared};
+use crate::Shared;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // GlobalReclaim (trait)
@@ -88,7 +90,7 @@ pub unsafe trait Protect: Clone + Sized {
         src: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<MarkedOption<Shared<T, Self::Reclaimer, N>>, NotEqualError>;
+    ) -> crate::AcquireResult<T, Self::Reclaimer, N>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -102,7 +104,7 @@ pub unsafe trait ProtectRegion: Protect {}
 // ReclaimPointer (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait ReclaimPointer: Sized + Internal {
+pub trait SharedPointer: Sized + Internal {
     /// The pointed-to type.
     type Item: Sized;
     /// TODO: Docs...
@@ -110,13 +112,13 @@ pub trait ReclaimPointer: Sized + Internal {
     /// Number of bits available for tagging.
     type MarkBits: Unsigned;
     /// TODO: Docs...
-    type Pointer: NonNullable<Item = Self::Item>;
+    type Pointer: MarkedNonNullable<Item = Self::Item, MarkBits = Self::MarkBits>;
 
     /// TODO: Docs
     fn with(ptr: Self::Pointer) -> Self;
-    
-    /// TODO: Docs...
-    fn compose(_: Self, tag: usize) -> Self;
+
+    /// TODO: Docs... (necessary method?)
+    fn compose(ptr: Self::Pointer, tag: usize) -> Self;
 
     /// TODO: Docs...
     unsafe fn from_marked_ptr(marked_ptr: MarkedPtr<Self::Item, Self::MarkBits>) -> Self;
@@ -131,8 +133,11 @@ pub trait ReclaimPointer: Sized + Internal {
     fn into_marked_ptr(self) -> MarkedPtr<Self::Item, Self::MarkBits>;
 
     /// TODO: Docs...
-    fn into_unmarked(self) -> Self;
+    fn clear_tag(self) -> Self;
 
     /// TODO: Docs...
+    fn with_tag(self, tag: usize) -> Self;
+
+    /// TODO: Docs... (necessary method?)
     fn decompose(self) -> (Self, usize);
 }

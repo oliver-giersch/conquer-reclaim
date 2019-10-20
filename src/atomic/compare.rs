@@ -1,4 +1,4 @@
-use crate::traits::ReclaimPointer;
+use crate::traits::SharedPointer;
 use crate::{Unlinked, Unprotected};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -6,9 +6,9 @@ use crate::{Unlinked, Unprotected};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// TODO: Docs...
-pub trait CompareAndSwap: ReclaimPointer {
+pub trait CompareAndSwap: SharedPointer {
     /// TODO: Docs...
-    type Success: ReclaimPointer<
+    type Success: SharedPointer<
         Item = Self::Item,
         Reclaimer = Self::Reclaimer,
         MarkBits = Self::MarkBits,
@@ -16,7 +16,7 @@ pub trait CompareAndSwap: ReclaimPointer {
     >;
 
     /// TODO: Docs...
-    type Failure: ReclaimPointer<
+    type Failure: SharedPointer<
         Item = Self::Item,
         Reclaimer = Self::Reclaimer,
         MarkBits = Self::MarkBits,

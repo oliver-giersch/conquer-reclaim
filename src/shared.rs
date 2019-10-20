@@ -4,11 +4,11 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use conquer_pointer::NonNullable;
+use conquer_pointer::{MarkedNonNullable, MarkedOption, NonNullable};
 use typenum::Unsigned;
 
 use crate::internal::Internal;
-use crate::traits::{Reclaim, ReclaimPointer};
+use crate::traits::{Reclaim, SharedPointer};
 use crate::Shared;
 
 /********** impl Clone ****************************************************************************/
@@ -24,10 +24,10 @@ impl<T, R, N> Clone for Shared<'_, T, R, N> {
 
 impl<T, R, N> Copy for Shared<'_, T, R, N> {}
 
-/********** impl ReclaimPointer *******************************************************************/
+/********** impl SharedPointer *******************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> ReclaimPointer for Shared<'_, T, R, N> {
-    impl_reclaim_pointer!();
+impl<T, R: Reclaim, N: Unsigned> SharedPointer for Shared<'_, T, R, N> {
+    impl_shared_pointer!();
 }
 
 /********** impl inherent *************************************************************************/
@@ -114,7 +114,7 @@ impl<T: fmt::Debug, R, N: Unsigned> fmt::Debug for Shared<'_, T, R, N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Shared")
             .field("ref", self.as_ref())
-            .field("tag", self.inner.decompose_tag())
+            .field("tag", &self.inner.decompose_tag())
             .finish()
     }
 }
@@ -128,6 +128,12 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
     }
 }
 
+/********** impl MarkedNonNullable ****************************************************************/
+
+impl<T, R, N: Unsigned> MarkedNonNullable for Shared<'_, T, R, N> {
+    impl_marked_non_nullable!();
+}
+
 /********** impl NonNullable **********************************************************************/
 
 impl<T, R, N: Unsigned> NonNullable for Shared<'_, T, R, N> {
@@ -136,4 +142,4 @@ impl<T, R, N: Unsigned> NonNullable for Shared<'_, T, R, N> {
 
 /********** impl Internal *************************************************************************/
 
-impl<T, R, N> Internal for Shared<'_, T, R, N> {}
+impl<T, R, N: Unsigned> Internal for Shared<'_, T, R, N> {}
