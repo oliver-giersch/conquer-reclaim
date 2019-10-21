@@ -4,7 +4,7 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use conquer_pointer::{MarkedNonNullable, MarkedOption, NonNullable};
+use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 use typenum::Unsigned;
 
 use crate::internal::Internal;
@@ -23,12 +23,6 @@ impl<T, R, N> Clone for Shared<'_, T, R, N> {
 /********** impl Copy *****************************************************************************/
 
 impl<T, R, N> Copy for Shared<'_, T, R, N> {}
-
-/********** impl SharedPointer *******************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned> SharedPointer for Shared<'_, T, R, N> {
-    impl_shared_pointer!();
-}
 
 /********** impl inherent *************************************************************************/
 
@@ -70,7 +64,10 @@ impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
     /// Decomposes the (marked) [`Shared`] reference, returning the reference
     /// itself and the separated tag.
     #[inline]
-    pub fn decompose_ref(self) -> (&'g T, usize) {
+    pub fn decompose_ref(self) -> (&'g T, usize)
+    where
+        N: 'static,
+    {
         unsafe { self.inner.decompose_ref() }
     }
 
@@ -126,6 +123,12 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
     }
+}
+
+/********** impl SharedPointer *******************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> SharedPointer for Shared<'_, T, R, N> {
+    impl_shared_pointer!();
 }
 
 /********** impl MarkedNonNullable ****************************************************************/

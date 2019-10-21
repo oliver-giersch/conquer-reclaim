@@ -161,7 +161,7 @@ macro_rules! impl_shared_pointer {
         fn into_marked_ptr(self) -> MarkedPtr<Self::Item, Self::MarkBits> {
             let inner = self.inner;
             core::mem::forget(self);
-            inner.into_marked_ptr();
+            inner.into_marked_ptr()
         }
 
         #[inline]

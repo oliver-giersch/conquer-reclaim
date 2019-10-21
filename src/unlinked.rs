@@ -8,12 +8,6 @@ use crate::retired::Retired;
 use crate::traits::{Reclaim, ReclaimHandle, SharedPointer};
 use crate::Unlinked;
 
-/********** impl SharedPointer *******************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned> SharedPointer for Unlinked<T, R, N> {
-    impl_shared_pointer!();
-}
-
 /********** impl inherent *************************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
@@ -32,6 +26,12 @@ impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
         let retired: Retired<R> = Retired::new_unchecked(self.inner.decompose_non_null());
         handle.retire(retired);
     }
+}
+
+/********** impl SharedPointer *******************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> SharedPointer for Unlinked<T, R, N> {
+    impl_shared_pointer!();
 }
 
 /********** impl MarkedNonNullable ****************************************************************/

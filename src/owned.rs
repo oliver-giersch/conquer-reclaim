@@ -2,7 +2,7 @@ use core::convert::TryFrom;
 use core::mem;
 use core::ptr::NonNull;
 
-use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedOption, MarkedPtr, NonNullable};
+use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
@@ -10,12 +10,6 @@ use crate::internal::Internal;
 use crate::record::Record;
 use crate::traits::{Reclaim, SharedPointer};
 use crate::Owned;
-
-/********** impl SharedPointer *******************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned> SharedPointer for Owned<T, R, N> {
-    impl_shared_pointer!();
-}
 
 /********** impl Drop *****************************************************************************/
 
@@ -36,6 +30,12 @@ impl<T, R: Reclaim, N: Unsigned> From<T> for Owned<T, R, N> {
     fn from(owned: T) -> Self {
         unimplemented!()
     }
+}
+
+/********** impl SharedPointer *******************************************************************/
+
+impl<T, R: Reclaim, N: Unsigned> SharedPointer for Owned<T, R, N> {
+    impl_shared_pointer!();
 }
 
 /********** impl MarkedNonNullable ****************************************************************/
