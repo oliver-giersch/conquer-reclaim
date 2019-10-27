@@ -180,9 +180,10 @@ macro_rules! impl_shared_pointer {
 
         #[inline]
         fn decompose(self) -> (Self, usize) {
-            let (inner, tag) = self.inner.decompose();
+            let inner = self.inner;
+            let tag = inner.decompose_tag();
             core::mem::forget(self);
-            (Self { inner, _marker: core::marker::PhantomData}, tag)
+            (Self { inner: inner.clear_tag(), _marker: core::marker::PhantomData}, tag)
         }
     };
 }

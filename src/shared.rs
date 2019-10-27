@@ -64,11 +64,8 @@ impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
     /// Decomposes the (marked) [`Shared`] reference, returning the reference
     /// itself and the separated tag.
     #[inline]
-    pub fn decompose_ref(self) -> (&'g T, usize)
-    where
-        N: 'static,
-    {
-        unsafe { self.inner.decompose_ref() }
+    pub fn decompose_ref(self) -> (&'g T, usize) {
+        unsafe { self.inner.decompose_ref_unbounded() }
     }
 
     /// Casts the [`Shared`] to a reference to a different type and with a different lifetime.
