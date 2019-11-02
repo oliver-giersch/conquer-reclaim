@@ -9,6 +9,8 @@ use core::ptr::NonNull;
 
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
 
 use crate::record::Record;
 use crate::traits::Reclaim;
@@ -110,9 +112,7 @@ impl<R: Reclaim + 'static> Eq for Retired<R> {}
 impl<R: Reclaim + 'static> fmt::Debug for Retired<R> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Retired")
-            .field("address", &self.as_ptr())
-            .finish()
+        f.debug_struct("Retired").field("address", &self.as_ptr()).finish()
     }
 }
 

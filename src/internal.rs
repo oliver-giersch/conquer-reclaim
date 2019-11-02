@@ -70,6 +70,7 @@ macro_rules! impl_marked_non_nullable {
         #[inline]
         fn into_marked_non_null(self) -> MarkedNonNull<Self::Item, Self::MarkBits> {
             let inner = self.inner;
+            #[allow(clippy::forget_copy)]
             core::mem::forget(self);
             inner
         }
@@ -131,7 +132,8 @@ macro_rules! impl_shared_pointer {
 
         #[inline]
         fn compose(ptr: Self::Pointer, tag: usize) -> Self {
-            let inner = ptr.inner.with_tag(tag);
+            let inner = ptr.inner.set_tag(tag);
+            #[allow(clippy::forget_copy)]
             core::mem::forget(ptr);
             Self { inner, _marker: core::marker::PhantomData }
         }
@@ -160,6 +162,7 @@ macro_rules! impl_shared_pointer {
         #[inline]
         fn into_marked_ptr(self) -> MarkedPtr<Self::Item, Self::MarkBits> {
             let inner = self.inner;
+            #[allow(clippy::forget_copy)]
             core::mem::forget(self);
             inner.into_marked_ptr()
         }
@@ -167,13 +170,15 @@ macro_rules! impl_shared_pointer {
         #[inline]
         fn clear_tag(self) -> Self {
             let inner = self.inner.clear_tag();
+            #[allow(clippy::forget_copy)]
             core::mem::forget(self);
             Self { inner, _marker: core::marker::PhantomData }
         }
 
         #[inline]
-        fn with_tag(self, tag: usize) -> Self {
-            let inner = self.inner.with_tag(tag);
+        fn set_tag(self, tag: usize) -> Self {
+            let inner = self.inner.set_tag(tag);
+            #[allow(clippy::forget_copy)]
             core::mem::forget(self);
             Self { inner, _marker: core::marker::PhantomData }
         }
@@ -182,6 +187,7 @@ macro_rules! impl_shared_pointer {
         fn decompose(self) -> (Self, usize) {
             let inner = self.inner;
             let tag = inner.decompose_tag();
+            #[allow(clippy::forget_copy)]
             core::mem::forget(self);
             (Self { inner: inner.clear_tag(), _marker: core::marker::PhantomData}, tag)
         }

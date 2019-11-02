@@ -1,6 +1,14 @@
 //! TODO: crate lvl docs...
 
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
+#![warn(missing_docs)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 pub mod prelude {
+    //! TODO: docs...
+
     pub use crate::traits::Reclaim;
 }
 
@@ -8,15 +16,11 @@ pub mod prelude {
 mod internal;
 
 mod atomic;
+mod guarded;
+mod imp;
 mod record;
 mod retired;
 mod traits;
-
-// implementation modules
-mod owned;
-mod shared;
-mod unlinked;
-mod unprotected;
 
 use core::marker::PhantomData;
 
@@ -26,10 +30,12 @@ pub use conquer_pointer::typenum;
 use conquer_pointer::{MarkedNonNull, MarkedOption};
 use typenum::Unsigned;
 
+pub use crate::guarded::Guarded;
+
 use crate::traits::Reclaim;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Owned (impl in owned.rs)
+// Owned (impl in imp/owned.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A pointer type for heap allocated values similar to [`Box`].
@@ -44,7 +50,7 @@ pub struct Owned<T, R: Reclaim, N: Unsigned> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Shared (impl in shared.rs)
+// Shared (impl in imp/shared.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A shared reference to a value that is actively protected from reclamation by
@@ -62,7 +68,7 @@ pub struct Shared<'g, T, R, N> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Unlinked (impl in unlinked.rs)
+// Unlinked (impl in imp/unlinked.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A reference to a value that has been removed from its previous location in
@@ -85,7 +91,7 @@ pub struct Unlinked<T, R, N> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Unprotected (impl in unprotected.rs)
+// Unprotected (impl in imp/unprotected.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A reference to a value loaded from an [`Atomic`] that is not actively

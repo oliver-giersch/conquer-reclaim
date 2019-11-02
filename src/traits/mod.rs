@@ -72,9 +72,9 @@ pub unsafe trait Protect: Clone + Sized {
     /// The associated memory reclamation scheme.    
     type Reclaimer: Reclaim;
 
-    // TODO: fn try_fuse(mut self, ...) -> ...
-
-    /// TODO: Docs...
+    /// Releases any protection that may be provided by the guard.
+    ///
+    /// If the guard also implements [`ProtectRegion`], this is a no-op.
     fn release(&mut self);
 
     /// TODO: Docs...
@@ -136,7 +136,7 @@ pub trait SharedPointer: Sized + Internal {
     fn clear_tag(self) -> Self;
 
     /// TODO: Docs...
-    fn with_tag(self, tag: usize) -> Self;
+    fn set_tag(self, tag: usize) -> Self;
 
     /// TODO: Docs... (necessary method?)
     fn decompose(self) -> (Self, usize);

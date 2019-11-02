@@ -32,7 +32,7 @@ where
 
     #[inline]
     fn compose(ptr: Self::Pointer, tag: usize) -> Self {
-        Some(ptr.with_tag(tag))
+        Some(ptr.set_tag(tag))
     }
 
     #[inline]
@@ -70,8 +70,8 @@ where
     }
 
     #[inline]
-    fn with_tag(self, tag: usize) -> Self {
-        self.map(|ptr| ptr.with_tag(tag))
+    fn set_tag(self, tag: usize) -> Self {
+        self.map(|ptr| ptr.set_tag(tag))
     }
 
     #[inline]
@@ -106,7 +106,7 @@ where
 
     #[inline]
     fn compose(ptr: Self::Pointer, tag: usize) -> Self {
-        Value(ptr.with_tag(tag))
+        Value(ptr.set_tag(tag))
     }
 
     #[inline]
@@ -142,9 +142,9 @@ where
     }
 
     #[inline]
-    fn with_tag(self, tag: usize) -> Self {
+    fn set_tag(self, tag: usize) -> Self {
         match self {
-            Value(ptr) => Value(ptr.with_tag(tag)),
+            Value(ptr) => Value(ptr.set_tag(tag)),
             Null(_) => Null(tag),
         }
     }

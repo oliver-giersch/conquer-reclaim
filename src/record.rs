@@ -21,9 +21,9 @@ use crate::traits::Reclaim;
 #[derive(Debug, Default, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Record<T, R: Reclaim> {
     /// The record's header
-    header: R::Header,
+    pub(crate) header: R::Header,
     /// The record's wrapped (inner) element
-    elem: T,
+    pub(crate) elem: T,
 }
 
 /********** impl inherent *************************************************************************/
