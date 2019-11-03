@@ -36,14 +36,14 @@ pub unsafe trait GlobalReclaim: Reclaim {
 /// TODO: Docs...
 pub unsafe trait Reclaim: Sized + 'static {
     /// TODO: Docs...
-    type Handle: ReclaimHandle<Reclaimer = Self>;
+    type DefaultHandle: ReclaimHandle<Reclaimer = Self>;
     /// TODO: Docs...
     type Header: Default + Sync + Sized;
     /// TODO: Docs...
     type Global: Default + Sync + Sized;
 
     /// TODO: Docs...
-    fn create_handle(global: impl Deref<Target = Self::Global>) -> Self::Handle;
+    fn create_handle(global: impl Deref<Target = Self::Global>) -> Self::DefaultHandle;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

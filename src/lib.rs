@@ -18,6 +18,7 @@ mod internal;
 mod atomic;
 mod guarded;
 mod imp;
+mod leak;
 mod record;
 mod retired;
 mod traits;
