@@ -74,7 +74,8 @@ pub unsafe trait Protect: Clone + Sized {
 
     /// Releases any protection that may be provided by the guard.
     ///
-    /// If the guard also implements [`ProtectRegion`], this is a no-op.
+    /// This method has no effect for guards that also implement
+    /// [`ProtectRegion`].
     fn release(&mut self);
 
     /// TODO: Docs...
