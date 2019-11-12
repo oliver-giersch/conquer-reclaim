@@ -1,45 +1,72 @@
-use conquer_pointer::MarkedOption::Value;
+//! TODO: mod-level docs
+
+use core::marker::PhantomData;
+use core::ops::Deref;
+use core::sync::atomic::Ordering;
+
+use conquer_pointer::{MarkedOption, MarkedPtr};
 use typenum::Unsigned;
 
 use crate::retired::Retired;
-use crate::traits::{Protect, ProtectRegion, Reclaim, ReclaimHandle};
+use crate::traits::{GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimHandle};
 use crate::AcquireResult;
 
-use conquer_pointer::{MarkedOption, MarkedPtr};
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::sync::atomic::Ordering;
-
 pub type Atomic<T, N> = crate::atomic::Atomic<T, Leaking, N>;
+pub type Owned<T, N> = crate::Owned<T, Leaking, N>;
 pub type Shared<'g, T, N> = crate::Shared<'g, T, Leaking, N>;
+pub type Unlinked<T, N> = crate::Unlinked<T, Leaking, N>;
+pub type Unprotected<T, N> = crate::Unprotected<T, Leaking, N>;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Leaking
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Copy, Clone, Debug, Default, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Leaking;
 
-#[derive(Default, Clone)]
-pub struct Handle;
+/********** impl GlobalReclaim ********************************************************************/
 
-impl ReclaimHandle for Handle {
-    type Reclaimer = Leaking;
+unsafe impl GlobalReclaim for Leaking {
     type Guard = Guard;
 
-    fn guard(&self) -> Self::Guard {
-        unimplemented!()
-    }
-
-    unsafe fn retire(&self, record: Retired<Self::Reclaimer>) {
-        unimplemented!()
-    }
+    #[inline]
+    unsafe fn retire_global(_: Retired<Self>) {}
 }
+
+/********** impl Reclaim **************************************************************************/
 
 unsafe impl Reclaim for Leaking {
     type DefaultHandle = Handle;
     type Header = ();
     type Global = ();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Handle
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Default, Clone)]
+pub struct Handle;
+
+/********** impl ReclaimHandle ********************************************************************/
+
+impl ReclaimHandle for Handle {
+    type Reclaimer = Leaking;
+    type GlobalHandle = &'static ();
+    type Guard = Guard;
 
     #[inline]
-    fn create_handle(_: impl Deref<Target = Self::Global>) -> Self::DefaultHandle {
-        Handle
+    fn new(_: Self::GlobalHandle) -> Self {
+        Self
     }
+
+    #[inline]
+    fn guard(&self) -> Self::Guard {
+        Guard
+    }
+
+    #[inline]
+    unsafe fn retire(&self, _: Retired<Self::Reclaimer>) {}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -49,14 +76,7 @@ unsafe impl Reclaim for Leaking {
 #[derive(Debug, Default, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Guard;
 
-/********** impl inherent *************************************************************************/
-
-impl Guard {
-    #[inline]
-    pub const fn new() -> Self {
-        Self
-    }
-}
+/********** impl Protect **************************************************************************/
 
 unsafe impl Protect for Guard {
     type Reclaimer = Leaking;
@@ -82,8 +102,14 @@ unsafe impl Protect for Guard {
         order: Ordering,
     ) -> AcquireResult<T, Self::Reclaimer, N> {
         match src.load_raw(order) {
-            ptr if ptr == expected => unimplemented!(),
+            ptr if ptr == expected => {
+                Ok(MarkedOption::from(ptr).map(|ptr| Shared { inner: ptr, _marker: PhantomData }))
+            }
             _ => Err(crate::NotEqualError(())),
         }
     }
 }
+
+/********** impl ProtectRegion ********************************************************************/
+
+unsafe impl ProtectRegion for Guard {}
