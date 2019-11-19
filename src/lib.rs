@@ -35,6 +35,8 @@ use conquer_pointer::{MarkedNonNull, MarkedOption};
 use typenum::Unsigned;
 
 pub use crate::guarded::Guarded;
+pub use crate::record::Record;
+pub use crate::retired::Retired;
 pub use crate::traits::{
     GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimHandle, SharedPointer,
 };
