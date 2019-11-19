@@ -96,16 +96,13 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
 
     /// Loads a raw marked value from the pointer.
     ///
-    /// `load_raw` takes an [`Ordering`][ordering] argument, which describes the
+    /// `load_raw` takes an [`Ordering`] argument, which describes the
     /// memory ordering of this operation.
     ///
     /// # Panics
     ///
-    /// Panics if `order` is [`Release`][release] or [`AcqRel`][acq_rel].
-    ///
-    /// [ordering]: core::sync::atomic::Ordering
-    /// [release]: core::sync::atomic::Ordering::Release
-    /// [acq_rel]: core::sync::atomic::Ordering::AcqRel
+    /// Panics if `order` is [`Release`][Ordering::Release] or
+    /// [`AcqRel`][Ordering::AcqRel].
     ///
     /// # Example
     ///
@@ -148,6 +145,9 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     /// need to be de-referenced, but is only used to reinsert it in a different
     /// spot, which is e.g. done when removing a value from a linked list.
     ///
+    /// `load_unprotected_marked_option` takes an [`Ordering`] argument, which
+    /// describes the memory ordering of this operation.
+    ///
     /// # Panics
     ///
     /// Panics if `order` is [`Release`][release] or [`AcqRel`][acq_rel].
@@ -176,13 +176,13 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     /// need to be de-referenced, but is only used to reinsert it in a different
     /// spot, which is e.g. done when removing a value from a linked list.
     ///
+    /// `load_unprotected` takes an [`Ordering`] argument, which
+    /// describes the memory ordering of this operation.
+    ///
     /// # Panics
     ///
-    /// Panics if `order` is [`Release`][release] or [`AcqRel`][acq_rel].
-    ///
-    /// [ordering]: core::sync::atomic::Ordering
-    /// [release]: core::sync::atomic::Ordering::Release
-    /// [acq_rel]: core::sync::atomic::Ordering::AcqRel
+    /// Panics if `order` is [`Release`][Ordering::Release] or
+    /// [`AcqRel`][Ordering::AcqRel].
     #[inline]
     pub fn load_unprotected(&self, order: Ordering) -> Option<Unprotected<T, R, N>> {
         self.load_unprotected_marked_option(order).value()

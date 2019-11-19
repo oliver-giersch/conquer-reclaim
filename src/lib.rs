@@ -9,7 +9,9 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
-    pub use crate::traits::Reclaim;
+    pub use crate::traits::{
+        GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimHandle, SharedPointer,
+    };
 }
 
 #[macro_use]
@@ -32,8 +34,9 @@ use conquer_pointer::{MarkedNonNull, MarkedOption};
 use typenum::Unsigned;
 
 pub use crate::guarded::Guarded;
-
-use crate::traits::Reclaim;
+pub use crate::traits::{
+    GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimHandle, SharedPointer,
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Owned (impl in imp/owned.rs)
