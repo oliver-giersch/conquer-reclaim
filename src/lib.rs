@@ -17,10 +17,11 @@ pub mod prelude {
 #[macro_use]
 mod internal;
 
+pub mod leak;
+
 mod atomic;
 mod guarded;
 mod imp;
-mod leak;
 mod record;
 mod retired;
 mod traits;
