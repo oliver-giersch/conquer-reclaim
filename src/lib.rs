@@ -34,6 +34,7 @@ pub use conquer_pointer::typenum;
 use conquer_pointer::{MarkedNonNull, MarkedOption};
 use typenum::Unsigned;
 
+pub use crate::atomic::{Atomic, CompareExchangeError};
 pub use crate::guarded::Guarded;
 pub use crate::record::Record;
 pub use crate::retired::Retired;
