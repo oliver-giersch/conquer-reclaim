@@ -1,16 +1,5 @@
 # Future API Design
 
-## ReclaimerScheme
-
-Common collection of associated types.
-
-```rust
-pub trait ReclaimerScheme {
-    type Header: Default + Sync + Sized;
-    type Global: Default + Sync + Sized;
-}
-```
-
 ## GlobalReclaimer
 
 ```rust
@@ -31,8 +20,6 @@ reference to the global state/handle or an owning shared pointer (`Arc`).
 
 ```rust
 pub trait Reclaimer: Default + Sync + Sized + 'static {
-    /// The associated reclamation scheme types.
-    type Scheme: ReclaimerScheme;
     /// Handle to local state, may or may not store a reference to
     /// global state.
     type Handle<'global>: ReclaimerHandle<Reclaimer = Self> + 'global;

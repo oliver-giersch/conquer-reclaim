@@ -3,19 +3,19 @@ use std::ptr;
 use std::sync::atomic::Ordering;
 
 use conquer_reclaim::typenum::U0;
-use conquer_reclaim::{Atomic, Owned, Reclaimer, ReclaimerHandle};
+use conquer_reclaim::{Owned, Reclaimer, ReclaimerHandle};
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
 
 struct Stack<T, R: Reclaimer> {
     head: Atomic<Node<T, R>, R>,
-    reclaimer_state: R::Global, // bad for global reclaimer (either global data or handle)
+    reclaimer: R,
 }
 
 impl<T, R: Reclaimer> Stack<T, R> {
     #[inline]
     pub fn new() -> Self {
-        Self { head: Atomic::null(), reclaimer_state: Default::default() }
+        Self { head: Atomic::null(), reclaimer: Default::default() }
     }
 
     #[inline]
@@ -57,7 +57,7 @@ impl<T, R: Reclaimer> Stack<T, R> {
 
 struct Node<T, R> {
     inner: ManuallyDrop<T>,
-    next: Atomic<T, R>,
+    next: Atomic<Node<T, R>, R>,
 }
 
 impl<T, R: Reclaimer> Node<T, R> {
@@ -66,3 +66,5 @@ impl<T, R: Reclaimer> Node<T, R> {
         Self { inner: ManuallyDrop::new(elem), next: Atomic::null() }
     }
 }
+
+fn main() {}

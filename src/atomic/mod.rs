@@ -369,7 +369,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
             .compare_exchange(current.into_marked_ptr(), new.as_marked_ptr(), success, failure)
             .map(|ptr| unsafe { <C::Success as SharedPointer>::from_marked_ptr(ptr) })
             .map_err(|ptr| CompareExchangeError {
-                loaded: unsafe { <C::Failure as SharedPointer>::from_marked_ptr(ptr) },
+                loaded: unsafe { MarkedOption::from_marked_ptr(ptr) },
                 input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
@@ -393,7 +393,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
             .compare_exchange_weak(current.into_marked_ptr(), new.as_marked_ptr(), success, failure)
             .map(|ptr| unsafe { <C::Success as SharedPointer>::from_marked_ptr(ptr) })
             .map_err(|ptr| CompareExchangeError {
-                loaded: unsafe { <C::Failure as SharedPointer>::from_marked_ptr(ptr) },
+                loaded: unsafe { MarkedOption::from_marked_ptr(ptr) },
                 input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
@@ -458,7 +458,7 @@ where
     I: SharedPointer,
 {
     /// The actually loaded value
-    pub loaded: C::Failure,
+    pub loaded: MarkedOption<Unprotected<C::Item, C::Reclaimer, C::MarkBits>>,
     /// The value with which the failed swap was attempted
     pub input: I,
     // prevents construction outside of the current module
