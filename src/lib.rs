@@ -1,7 +1,7 @@
 //! TODO: crate lvl docs...
 
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
-#![warn(missing_docs)]
+//#![warn(missing_docs)]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;

@@ -14,6 +14,7 @@ use std::boxed::Box;
 
 use crate::record::Record;
 use crate::traits::Reclaimer;
+use std::fmt::{Error, Formatter};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Retired
@@ -119,6 +120,15 @@ impl<R: Reclaimer + 'static> fmt::Debug for Retired<R> {
 /********** impl Display **************************************************************************/
 
 impl<R: Reclaimer + 'static> fmt::Display for Retired<R> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Pointer::fmt(&self.as_ptr(), f)
+    }
+}
+
+/********** impl Pointer **************************************************************************/
+
+impl<R: Reclaimer + 'static> fmt::Pointer for Retired<R> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.as_ptr(), f)

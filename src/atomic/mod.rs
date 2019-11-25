@@ -49,7 +49,7 @@ impl<T, R, N> Atomic<T, R, N> {
         Self { inner: AtomicMarkedPtr::null(), _marker: PhantomData }
     }
 
-    /// Gets a reference to the underlying (raw) [`AtomicMarkedPtr`].
+    /// Returns a reference to the underlying (raw) [`AtomicMarkedPtr`].
     #[inline]
     pub const fn as_raw(&self) -> &AtomicMarkedPtr<T, N> {
         &self.inner
@@ -130,6 +130,18 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn load_raw(&self, order: Ordering) -> MarkedPtr<T, N> {
         self.inner.load(order)
+    }
+
+    #[inline]
+    pub fn load_raw_if_equal(
+        &self,
+        expected: MarkedPtr<T, N>,
+        order: Ordering,
+    ) -> Result<MarkedPtr<T, N>, NotEqualError> {
+        match self.load_raw(order) {
+            ptr if ptr == expected => Ok(ptr),
+            _ => Err(NotEqualError(())),
+        }
     }
 
     /// Loads an [`Unprotected`] reference wrapped in a [`MarkedOption`] from
@@ -225,7 +237,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         guard: impl GuardRef<'g, Reclaimer = R>,
         order: Ordering,
     ) -> Result<MarkedOption<Shared<'g, T, R, N>>, NotEqualError> {
-        unimplemented!()
+        guard.load_protected_if_equal(self, expected, order)
     }
 
     /// Loads a value from the pointer and uses `guard` to protect it.

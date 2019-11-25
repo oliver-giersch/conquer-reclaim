@@ -94,11 +94,8 @@ where
         expected: MarkedPtr<T, N>,
         order: Ordering,
     ) -> AcquireResult<'g, T, Self::Reclaimer, N> {
-        match atomic.load_raw(order) {
-            raw if raw == expected => {
-                Ok(MarkedOption::from(raw).map(|ptr| Shared { inner: ptr, _marker: PhantomData }))
-            }
-            _ => Err(crate::NotEqualError(())),
-        }
+        atomic.load_raw_if_equal(expected, order).map(|ptr| {
+            MarkedOption::from(ptr).map(|ptr| Shared { inner: ptr, _marker: PhantomData })
+        })
     }
 }

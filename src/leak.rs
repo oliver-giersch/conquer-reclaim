@@ -64,7 +64,7 @@ pub struct Handle;
 
 /********** impl ReclaimHandle ********************************************************************/
 
-impl ReclaimerHandle for Handle {
+unsafe impl ReclaimerHandle for Handle {
     type Reclaimer = Leaking;
     type Guard = Guard;
 
@@ -96,26 +96,23 @@ unsafe impl Protect for Guard {
     #[inline]
     fn protect<T, N: Unsigned>(
         &mut self,
-        src: &Atomic<T, N>,
+        atomic: &Atomic<T, N>,
         order: Ordering,
     ) -> MarkedOption<Shared<T, N>> {
-        MarkedOption::from(src.load_raw(order))
+        MarkedOption::from(atomic.load_raw(order))
             .map(|ptr| Shared { inner: ptr, _marker: PhantomData })
     }
 
     #[inline]
     fn protect_if_equal<T, N: Unsigned>(
         &mut self,
-        src: &Atomic<T, N>,
+        atomic: &Atomic<T, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
     ) -> AcquireResult<T, Self::Reclaimer, N> {
-        match src.load_raw(order) {
-            ptr if ptr == expected => {
-                Ok(MarkedOption::from(ptr).map(|ptr| Shared { inner: ptr, _marker: PhantomData }))
-            }
-            _ => Err(crate::NotEqualError(())),
-        }
+        atomic.load_raw_if_equal(expected, order).map(|ptr| {
+            MarkedOption::from(ptr).map(|ptr| Shared { inner: ptr, _marker: PhantomData })
+        })
     }
 }
 
