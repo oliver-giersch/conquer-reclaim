@@ -7,7 +7,7 @@ use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 use typenum::Unsigned;
 
 use crate::internal::Internal;
-use crate::traits::{Reclaim, SharedPointer};
+use crate::traits::{Reclaimer, SharedPointer};
 use crate::{Shared, Unprotected};
 
 /********** impl Clone ****************************************************************************/
@@ -25,7 +25,7 @@ impl<T, R, N> Copy for Unprotected<T, R, N> {}
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Unprotected<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> Unprotected<T, R, N> {
     impl_common!();
 
     /// Converts the [`Unprotected`] into a ("fake" protected) [`Shared`]
@@ -59,7 +59,7 @@ impl<T, R: Reclaim, N: Unsigned> Unprotected<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> fmt::Debug for Unprotected<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> fmt::Debug for Unprotected<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (ptr, tag) = self.inner.decompose();
@@ -69,7 +69,7 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Debug for Unprotected<T, R, N> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Unprotected<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Unprotected<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
@@ -78,7 +78,7 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Unprotected<T, R, N> {
 
 /********** impl SharedPointer *******************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> SharedPointer for Unprotected<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> SharedPointer for Unprotected<T, R, N> {
     impl_shared_pointer!();
 }
 

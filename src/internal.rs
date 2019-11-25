@@ -4,7 +4,7 @@
 use conquer_pointer::{MarkedNonNullable, MarkedOption};
 use typenum::Unsigned;
 
-use crate::traits::{Reclaim, SharedPointer};
+use crate::traits::{Reclaimer, SharedPointer};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal (trait)
@@ -15,13 +15,13 @@ pub trait Internal {}
 
 /********** blanket impls *************************************************************************/
 
-impl<P, T, R: Reclaim, N: Unsigned> Internal for Option<P> where
+impl<P, T, R: Reclaimer, N: Unsigned> Internal for Option<P> where
     P: SharedPointer<Item = T, Reclaimer = R, MarkBits = N>
         + MarkedNonNullable<Item = T, MarkBits = N>
 {
 }
 
-impl<P, T, R: Reclaim, N: Unsigned> Internal for MarkedOption<P> where
+impl<P, T, R: Reclaimer, N: Unsigned> Internal for MarkedOption<P> where
     P: SharedPointer<Item = T, Reclaimer = R, MarkBits = N>
         + MarkedNonNullable<Item = T, MarkBits = N>
 {

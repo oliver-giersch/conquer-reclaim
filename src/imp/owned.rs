@@ -16,12 +16,12 @@ use typenum::Unsigned;
 use crate::atomic::Atomic;
 use crate::internal::Internal;
 use crate::record::Record;
-use crate::traits::{Reclaim, SharedPointer};
+use crate::traits::{Reclaimer, SharedPointer};
 use crate::{Owned, Shared, Unprotected};
 
 /********** impl Clone ****************************************************************************/
 
-impl<T: Clone, R: Reclaim, N: Unsigned> Clone for Owned<T, R, N> {
+impl<T: Clone, R: Reclaimer, N: Unsigned> Clone for Owned<T, R, N> {
     #[inline]
     fn clone(&self) -> Self {
         let (reference, tag) = unsafe { self.inner.decompose_ref() };
@@ -31,12 +31,12 @@ impl<T: Clone, R: Reclaim, N: Unsigned> Clone for Owned<T, R, N> {
 
 /********** impl Send + Sync **********************************************************************/
 
-unsafe impl<T, R: Reclaim, N: Unsigned> Send for Owned<T, R, N> where T: Send {}
-unsafe impl<T, R: Reclaim, N: Unsigned> Sync for Owned<T, R, N> where T: Sync {}
+unsafe impl<T, R: Reclaimer, N: Unsigned> Send for Owned<T, R, N> where T: Send {}
+unsafe impl<T, R: Reclaimer, N: Unsigned> Sync for Owned<T, R, N> where T: Sync {}
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     /// Allocates memory for a [`Record<T>`](Record) on the heap and then
     /// places a record with a default header and `owned` into it.
     ///
@@ -261,7 +261,7 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
 
 /********** impl AsRef ****************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> AsRef<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> AsRef<T> for Owned<T, R, N> {
     #[inline]
     fn as_ref(&self) -> &T {
         self.deref()
@@ -270,7 +270,7 @@ impl<T, R: Reclaim, N: Unsigned> AsRef<T> for Owned<T, R, N> {
 
 /********** impl AsMut ****************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> AsMut<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> AsMut<T> for Owned<T, R, N> {
     #[inline]
     fn as_mut(&mut self) -> &mut T {
         self.deref_mut()
@@ -279,7 +279,7 @@ impl<T, R: Reclaim, N: Unsigned> AsMut<T> for Owned<T, R, N> {
 
 /********** impl Borrow ***************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Borrow<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> Borrow<T> for Owned<T, R, N> {
     #[inline]
     fn borrow(&self) -> &T {
         self.deref()
@@ -288,7 +288,7 @@ impl<T, R: Reclaim, N: Unsigned> Borrow<T> for Owned<T, R, N> {
 
 /********** impl BorrowMut ************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> BorrowMut<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> BorrowMut<T> for Owned<T, R, N> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut T {
         self.deref_mut()
@@ -297,7 +297,7 @@ impl<T, R: Reclaim, N: Unsigned> BorrowMut<T> for Owned<T, R, N> {
 
 /********** impl Default **************************************************************************/
 
-impl<T: Default, R: Reclaim, N: Unsigned> Default for Owned<T, R, N> {
+impl<T: Default, R: Reclaimer, N: Unsigned> Default for Owned<T, R, N> {
     #[inline]
     fn default() -> Self {
         Self::new(T::default())
@@ -306,7 +306,7 @@ impl<T: Default, R: Reclaim, N: Unsigned> Default for Owned<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> fmt::Debug for Owned<T, R, N>
+impl<T, R: Reclaimer, N: Unsigned> fmt::Debug for Owned<T, R, N>
 where
     T: fmt::Debug,
 {
@@ -319,7 +319,7 @@ where
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Owned<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
@@ -328,7 +328,7 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Owned<T, R, N> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Drop for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> Drop for Owned<T, R, N> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -340,7 +340,7 @@ impl<T, R: Reclaim, N: Unsigned> Drop for Owned<T, R, N> {
 
 /********** impl From *****************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> From<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> From<T> for Owned<T, R, N> {
     #[inline]
     fn from(owned: T) -> Self {
         Self::new(owned)
@@ -349,7 +349,7 @@ impl<T, R: Reclaim, N: Unsigned> From<T> for Owned<T, R, N> {
 
 /********** impl TryFrom **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> TryFrom<Atomic<T, R, N>> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> TryFrom<Atomic<T, R, N>> for Owned<T, R, N> {
     type Error = NullError;
 
     #[inline]
@@ -360,22 +360,22 @@ impl<T, R: Reclaim, N: Unsigned> TryFrom<Atomic<T, R, N>> for Owned<T, R, N> {
 
 /********** impl SharedPointer *******************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> SharedPointer for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> SharedPointer for Owned<T, R, N> {
     impl_shared_pointer!();
 }
 
 /********** impl MarkedNonNullable ****************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> MarkedNonNullable for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> MarkedNonNullable for Owned<T, R, N> {
     impl_marked_non_nullable!();
 }
 
 /********** impl NonNullable **********************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> NonNullable for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> NonNullable for Owned<T, R, N> {
     impl_non_nullable!();
 }
 
 /********** impl Internal *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Internal for Owned<T, R, N> {}
+impl<T, R: Reclaimer, N: Unsigned> Internal for Owned<T, R, N> {}

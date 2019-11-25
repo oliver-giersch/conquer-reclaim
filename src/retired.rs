@@ -13,7 +13,7 @@ use alloc::boxed::Box;
 use std::boxed::Box;
 
 use crate::record::Record;
-use crate::traits::Reclaim;
+use crate::traits::Reclaimer;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Retired
@@ -24,7 +24,7 @@ pub struct Retired<R>(NonNull<dyn Any + 'static>, PhantomData<R>);
 
 /********** impl inherent *************************************************************************/
 
-impl<R: Reclaim + 'static> Retired<R> {
+impl<R: Reclaimer + 'static> Retired<R> {
     /// Creates a new [`Retired`] record from a raw pointer.
     ///
     /// # Safety
@@ -78,7 +78,7 @@ impl<R: Reclaim + 'static> Retired<R> {
 
 /********** impl PartialEq ************************************************************************/
 
-impl<R: Reclaim + 'static> PartialEq for Retired<R> {
+impl<R: Reclaimer + 'static> PartialEq for Retired<R> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.as_ptr().eq(&other.as_ptr())
@@ -87,7 +87,7 @@ impl<R: Reclaim + 'static> PartialEq for Retired<R> {
 
 /********** impl PartialOrd ***********************************************************************/
 
-impl<R: Reclaim + 'static> PartialOrd for Retired<R> {
+impl<R: Reclaimer + 'static> PartialOrd for Retired<R> {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         self.as_ptr().partial_cmp(&other.as_ptr())
@@ -96,7 +96,7 @@ impl<R: Reclaim + 'static> PartialOrd for Retired<R> {
 
 /********** impl Ord ******************************************************************************/
 
-impl<R: Reclaim + 'static> Ord for Retired<R> {
+impl<R: Reclaimer + 'static> Ord for Retired<R> {
     #[inline]
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.as_ptr().cmp(&other.as_ptr())
@@ -105,11 +105,11 @@ impl<R: Reclaim + 'static> Ord for Retired<R> {
 
 /********** impl Eq *******************************************************************************/
 
-impl<R: Reclaim + 'static> Eq for Retired<R> {}
+impl<R: Reclaimer + 'static> Eq for Retired<R> {}
 
 /********** impl Debug ****************************************************************************/
 
-impl<R: Reclaim + 'static> fmt::Debug for Retired<R> {
+impl<R: Reclaimer + 'static> fmt::Debug for Retired<R> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Retired").field("address", &self.as_ptr()).finish()
@@ -118,7 +118,7 @@ impl<R: Reclaim + 'static> fmt::Debug for Retired<R> {
 
 /********** impl Display **************************************************************************/
 
-impl<R: Reclaim + 'static> fmt::Display for Retired<R> {
+impl<R: Reclaimer + 'static> fmt::Display for Retired<R> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.as_ptr(), f)

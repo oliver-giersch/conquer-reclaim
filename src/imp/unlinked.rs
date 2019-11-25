@@ -5,15 +5,15 @@ use typenum::Unsigned;
 
 use crate::internal::Internal;
 use crate::retired::Retired;
-use crate::traits::{Reclaim, ReclaimHandle, SharedPointer};
+use crate::traits::{Reclaimer, ReclaimerHandle, SharedPointer};
 use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> Unlinked<T, R, N> {
     /// TODO: Docs...
     #[inline]
-    pub unsafe fn retire(self, handle: &impl ReclaimHandle<Reclaimer = R>)
+    pub unsafe fn retire(self, handle: impl ReclaimerHandle<Reclaimer = R>)
     where
         T: 'static,
     {
@@ -22,7 +22,7 @@ impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
 
     /// TODO: Docs...
     #[inline]
-    pub unsafe fn retire_unchecked(self, handle: &impl ReclaimHandle<Reclaimer = R>) {
+    pub unsafe fn retire_unchecked(self, handle: impl ReclaimerHandle<Reclaimer = R>) {
         let retired: Retired<R> = Retired::new_unchecked(self.inner.decompose_non_null());
         handle.retire(retired);
     }
@@ -30,7 +30,7 @@ impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
 
 /********** impl SharedPointer *******************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> SharedPointer for Unlinked<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> SharedPointer for Unlinked<T, R, N> {
     impl_shared_pointer!();
 }
 

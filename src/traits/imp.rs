@@ -10,11 +10,11 @@ use conquer_pointer::{
 use typenum::Unsigned;
 
 use crate::internal::Internal;
-use crate::traits::{Reclaim, SharedPointer};
+use crate::traits::{Reclaimer, SharedPointer};
 
 /********** blanket impl for Option ***************************************************************/
 
-impl<P, T, R: Reclaim, N: Unsigned> SharedPointer for Option<P>
+impl<P, T, R: Reclaimer, N: Unsigned> SharedPointer for Option<P>
 where
     P: SharedPointer<Pointer = P, Item = T, Reclaimer = R, MarkBits = N>
         + MarkedNonNullable<Item = T, MarkBits = N>
@@ -88,7 +88,7 @@ where
 
 /********** blanket impl for MarkedOption *********************************************************/
 
-impl<P, T, R: Reclaim, N: Unsigned> SharedPointer for MarkedOption<P>
+impl<P, T, R: Reclaimer, N: Unsigned> SharedPointer for MarkedOption<P>
 where
     P: SharedPointer<Pointer = P, Item = T, Reclaimer = R, MarkBits = N>
         + MarkedNonNullable<Item = T, MarkBits = N>
@@ -156,7 +156,7 @@ where
                 let (ptr, tag) = ptr.decompose();
                 (Value(ptr), tag)
             }
-            Null(tag) => (Null(0), 0),
+            Null(tag) => (Null(0), tag),
         }
     }
 }

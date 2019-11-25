@@ -8,7 +8,7 @@ use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 use typenum::Unsigned;
 
 use crate::internal::Internal;
-use crate::traits::{Reclaim, SharedPointer};
+use crate::traits::{Reclaimer, SharedPointer};
 use crate::Shared;
 
 /********** impl Clone ****************************************************************************/
@@ -26,7 +26,7 @@ impl<T, R, N> Copy for Shared<'_, T, R, N> {}
 
 /********** impl inherent *************************************************************************/
 
-impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
+impl<'g, T, R: Reclaimer, N: Unsigned> Shared<'g, T, R, N> {
     impl_common!();
 
     /// Consumes and decomposes the [`Shared`] reference, returning only the
@@ -115,7 +115,7 @@ impl<T: fmt::Debug, R, N: Unsigned> fmt::Debug for Shared<'_, T, R, N> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
@@ -124,7 +124,7 @@ impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
 
 /********** impl SharedPointer *******************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> SharedPointer for Shared<'_, T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned> SharedPointer for Shared<'_, T, R, N> {
     impl_shared_pointer!();
 }
 

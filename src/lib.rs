@@ -10,7 +10,7 @@ pub mod prelude {
     //! TODO: docs...
 
     pub use crate::traits::{
-        GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimHandle, SharedPointer,
+        GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle, SharedPointer,
     };
 }
 
@@ -39,7 +39,7 @@ pub use crate::guarded::Guarded;
 pub use crate::record::Record;
 pub use crate::retired::Retired;
 pub use crate::traits::{
-    GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimHandle, SharedPointer,
+    GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle, SharedPointer,
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -52,7 +52,7 @@ pub use crate::traits::{
 /// allocate the appropriate [`RecordHeader`][Reclaim::RecordHeader] type
 /// for its generic [`Reclaim`] parameter alongside their actual content.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub struct Owned<T, R: Reclaim, N: Unsigned> {
+pub struct Owned<T, R: Reclaimer, N: Unsigned> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(T, R)>,
 }

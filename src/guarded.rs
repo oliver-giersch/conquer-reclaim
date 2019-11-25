@@ -9,7 +9,7 @@ use conquer_pointer::{
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
-use crate::traits::{Protect, SharedPointer};
+use crate::traits::Protect;
 use crate::Shared;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

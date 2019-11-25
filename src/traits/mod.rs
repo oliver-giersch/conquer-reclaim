@@ -1,6 +1,5 @@
 mod imp;
 
-use core::ops::Deref;
 use core::sync::atomic::Ordering;
 
 use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedOption, MarkedPtr};
@@ -12,58 +11,49 @@ use crate::retired::Retired;
 use crate::Shared;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// GlobalReclaim (trait)
+// GlobalReclaimer (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// TODO: Docs...
-pub unsafe trait GlobalReclaim: Reclaim {
+pub unsafe trait GlobalReclaimer: Reclaimer {
     /// TODO: Docs...
-    type Guard: Protect<Reclaimer = Self> + Default + 'static;
-
+    fn guard() -> <Self::Handle as ReclaimerHandle>::Guard;
     /// TODO: Docs...
-    fn guard() -> Self::Guard {
-        Self::Guard::default()
-    }
-
-    /// TODO: Docs...
-    unsafe fn retire_global(record: Retired<Self>);
+    unsafe fn retire(record: Retired<Self>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Reclaim (trait)
+// Reclaimer (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// TODO: Docs...
-pub unsafe trait Reclaim: Sized + 'static {
-    /// TODO: Docs...
-    type DefaultHandle: ReclaimHandle<Reclaimer = Self>; // TODO: Scratch again?
-    /// TODO: Docs...
-    type Header: Default + Sync + Sized;
-    /// TODO: Docs...
+pub unsafe trait Reclaimer: Default + Sync + Sized + 'static {
+    /// TODO: docs...
     type Global: Default + Sync + Sized;
+    /// TODO: docs...
+    type Header: Default + Sync + Sized + 'static;
+    /// TODO: docs...
+    type Handle: ReclaimerHandle<Reclaimer = Self>;
+
+    /// TODO: docs...
+    fn create_local_handle(&self) -> Self::Handle;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// ReclaimHandle (trait)
+// ReclaimerHandle (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// TODO: Docs...
-pub trait ReclaimHandle: Clone + Sized {
+pub trait ReclaimerHandle: Clone + Sized {
     /// TODO: Docs...
-    type Reclaimer: Reclaim;
-    /// TODO: Docs...
-    type GlobalHandle: Deref<Target = <Self::Reclaimer as Reclaim>::Global>;
-    /// TODO: Docs...
-    type Owned: Sized;
+    type Reclaimer: Reclaimer;
     /// TODO: Docs...
     type Guard: Protect<Reclaimer = Self::Reclaimer>;
 
     /// TODO: Docs...
-    fn new_owned(global: Self::GlobalHandle) -> Self::Owned;
+    fn guard(self) -> Self::Guard;
     /// TODO: Docs...
-    fn guard(&self) -> Self::Guard;
-    /// TODO: Docs...
-    unsafe fn retire(&self, record: Retired<Self::Reclaimer>);
+    unsafe fn retire(self, record: Retired<Self::Reclaimer>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,8 +62,8 @@ pub trait ReclaimHandle: Clone + Sized {
 
 /// TODO: Docs...
 pub unsafe trait Protect: Clone + Sized {
-    /// The associated memory reclamation scheme.    
-    type Reclaimer: Reclaim;
+    /// The associated memory reclaimer.
+    type Reclaimer: Reclaimer;
 
     /// Releases any protection that may be provided by the guard.
     ///
@@ -108,11 +98,12 @@ pub unsafe trait ProtectRegion: Protect {}
 // ReclaimPointer (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// TODO: docs...
 pub trait SharedPointer: Sized + Internal {
     /// The pointed-to type.
     type Item: Sized;
     /// TODO: Docs...
-    type Reclaimer: Reclaim;
+    type Reclaimer: Reclaimer;
     /// Number of bits available for tagging.
     type MarkBits: Unsigned;
     /// TODO: Docs...
