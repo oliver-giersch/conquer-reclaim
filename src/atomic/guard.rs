@@ -10,7 +10,7 @@ use crate::{AcquireResult, Shared};
 use std::marker::PhantomData;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Guard (trait)
+// GuardRef (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A sealed trait for abstracting over different types for valid guard references.
@@ -82,8 +82,9 @@ where
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
     ) -> MarkedOption<Shared<'g, T, Self::Reclaimer, N>> {
-        MarkedOption::from(atomic.load_raw(order))
-            .map(|ptr| Shared { inner: ptr, _marker: PhantomData })
+        atomic
+            .load_unprotected_marked_option(order)
+            .map(|unprotected| unsafe { unprotected.into_shared() })
     }
 
     #[inline]

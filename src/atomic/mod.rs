@@ -13,7 +13,7 @@ pub use self::compare::CompareAndSwap;
 pub use self::guard::GuardRef;
 
 use crate::traits::{Reclaimer, SharedPointer};
-use crate::{Owned, Shared, Unlinked, Unprotected};
+use crate::{NotEqualError, Owned, Shared, Unlinked, Unprotected};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Atomic
@@ -217,6 +217,17 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         guard.load_protected(self, order)
     }
 
+    /// TODO: docs...
+    #[inline]
+    pub fn load_marked_option_if_equal<'g>(
+        &self,
+        expected: MarkedPtr<T, N>,
+        guard: impl GuardRef<'g, Reclaimer = R>,
+        order: Ordering,
+    ) -> Result<MarkedOption<Shared<'g, T, R, N>>, NotEqualError> {
+        unimplemented!()
+    }
+
     /// Loads a value from the pointer and uses `guard` to protect it.
     ///
     /// If the loaded value is non-null, the value is guaranteed to be protected
@@ -239,6 +250,16 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         order: Ordering,
     ) -> Option<Shared<'g, T, R, N>> {
         self.load_marked_option(guard, order).value()
+    }
+
+    /// TODO: docs...
+    pub fn load_if_equal<'g>(
+        &self,
+        expected: MarkedPtr<T, N>,
+        guard: impl GuardRef<'g, Reclaimer = R>,
+        order: Ordering,
+    ) -> Result<Option<Shared<'g, T, R, N>>, NotEqualError> {
+        self.load_marked_option_if_equal(expected, guard, order).map(MarkedOption::value)
     }
 
     /// Stores either `null` or a valid pointer to an owned heap allocated value
@@ -366,6 +387,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
             })
     }
 
+    /// TODO: docs...
     #[inline]
     pub fn take(&mut self) -> Option<Owned<T, R, N>> {
         MarkedOption::from(self.inner.swap(MarkedPtr::null(), Ordering::Relaxed))
