@@ -1,43 +1,83 @@
+use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::atomic::Ordering;
 
+use conquer_pointer::MarkedOption::Value;
 use conquer_reclaim::typenum::U0;
-use conquer_reclaim::{Owned, Reclaimer, ReclaimerHandle};
+use conquer_reclaim::{Owned, GlobalReclaimer, ReclaimerHandle};
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
 
-struct Stack<T, R: Reclaimer> {
+struct Stack<T, R: GlobalReclaimer> {
     head: Atomic<Node<T, R>, R>,
-    reclaimer: R,
+    _marker: PhantomData<R>,
 }
 
-impl<T, R: Reclaimer> Stack<T, R> {
+impl<T, R: GlobalReclaimer> Stack<T, R> {
     #[inline]
     pub fn new() -> Self {
-        Self { head: Atomic::null(), reclaimer: Default::default() }
+        Self { head: Atomic::null(), _marker: PhantomData }
     }
 
     #[inline]
-    pub fn push(&self, elem: T, handle: &mut impl ReclaimerHandle<Reclaimer = R>) {
+    pub fn push(&self, elem: T) {
         let mut node = Owned::new(Node::new(elem));
-        let mut guard = handle.guard();
 
         loop {
-            let head = self.head.load(&mut guard, Ordering::Relaxed);
-            node.as_ref().next.store(head, Ordering::Relaxed);
-            match self.head.compare_exchange(head, node, Ordering::Release, Ordering::Relaxed) {
+            let head = self.head.load_unprotected(Ordering::Relaxed);
+            node.next.store(head, Ordering::Relaxed);
+            match self.head.compare_exchange_weak(head, node, Ordering::Release, Ordering::Relaxed) {
                 Ok(_) => return,
-                Err(fail) => {
-                    node = fail.input;
-                }
+                Err(fail) => node = fail.input
             }
         }
     }
 
     #[inline]
-    pub fn pop(&self, handle: &mut impl ReclaimerHandle<Reclaimer = R>) -> Option<T> {
+    pub fn pop(&self) -> Option<T> {
+        /*
+        let mut guard = R::guard();
+        // Option/MarkedOption opt-in
+        while let Some(head) = self.head.load(&mut guard, Ordering::Acquire).as_ref() {
+            let next = unsafe { head.deref().next.load_unprotected(Ordering::Relaxed);
+            if let Ok(Pointer(unlinked)) = self.head.compare_exchange_weak(head, next), Ordering::Release, Ordering::Relaxed) {
+                unsafe {
+                    let res = ptr::read(&*unlinked.as_ref().inner);
+                    unlinked.retire_global();
+                    return Some(res);
+                }
+            }
+        }
+
+        None
+        */
+
+
         let mut guard = handle.guard();
+
+        // while let (Some(head), shared) = self.head.load(&mut guard, Ordering::Acquire).as_ref() { .. }
+
+        loop {
+            let head = self.head.load(&mut guard, Ordering::Acquire);
+            match unsafe { head.as_ref() } {
+                Some(node) => {
+                    let next = node.next.load_unprotected(Ordering::Relaxed);
+                    if let Ok(Value(unlinked)) = self.head.compare_exchange_weak(head, next, Ordering::Release, Ordering::Relaxed) {
+                        unsafe {
+                            let res = unimplemented!();
+                            //R::retire(unlinked)
+                            return Some(res)
+                        }
+                    }
+                }
+                None => return None,
+            }
+        }
+
+        while let Some(head) = self.head.load(&mut guard, Ordering::Acquire).as_ref()
+
+
         while let Some(head) = self.head.load(&mut guard, Ordering::Acquire) {
             let next = head.as_ref().next.load_unprotected(Ordering::Relaxed);
             if let Ok(unlinked) =

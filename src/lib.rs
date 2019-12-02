@@ -31,7 +31,7 @@ use core::marker::PhantomData;
 pub use conquer_pointer;
 pub use conquer_pointer::typenum;
 
-use conquer_pointer::{MarkedNonNull, MarkedOption};
+use conquer_pointer::{MarkedNonNull, MarkedPtr};
 use typenum::Unsigned;
 
 pub use crate::atomic::{Atomic, CompareExchangeError};
@@ -39,7 +39,7 @@ pub use crate::guarded::Guarded;
 pub use crate::record::Record;
 pub use crate::retired::Retired;
 pub use crate::traits::{
-    GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle, SharedPointer,
+    GenericReclaimer, GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -123,11 +123,3 @@ pub struct Unprotected<T, R, N> {
 /// TODO: Docs...
 #[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct NotEqualError(());
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// AcquireResult
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// Result type the [`acquire_if_equal`][crate::traits::Protect::acquire_if_equal]
-/// trait method.
-pub type AcquireResult<'g, T, R, N> = Result<MarkedOption<Shared<'g, T, R, N>>, NotEqualError>;

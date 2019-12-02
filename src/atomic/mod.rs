@@ -1,19 +1,22 @@
 mod compare;
 mod guard;
+mod store;
 
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{AtomicMarkedPtr, MarkedOption, MarkedPtr};
+use conquer_pointer::{AtomicMarkedPtr, MarkedOption, MarkedPtr, MarkedNonNull};
 use typenum::Unsigned;
 
 pub use self::compare::CompareAndSwap;
 pub use self::guard::GuardRef;
+pub use self::store::StoreArg;
 
 use crate::traits::{Reclaimer, SharedPointer};
 use crate::{NotEqualError, Owned, Shared, Unlinked, Unprotected};
+use crate::atomic::compare::CompareArg;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Atomic
@@ -66,20 +69,6 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         Self::from(Owned::from(val))
     }
 
-    /// TODO: Docs...
-    #[inline]
-    pub fn get_mut(&mut self) -> Option<&mut T> {
-        unsafe { self.inner.load(Ordering::Relaxed).as_mut() }
-    }
-
-    /// TODO: Docs...    
-    #[inline]
-    pub fn into_owned(self) -> Option<Owned<T, R, N>> {
-        MarkedOption::from(self.inner.load(Ordering::Relaxed))
-            .map(|ptr| Owned { inner: ptr, _marker: PhantomData })
-            .value()
-    }
-
     /// Creates a new [`Atomic`] from the given `ptr`.
     ///
     /// # Safety
@@ -92,6 +81,20 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub unsafe fn from_raw(ptr: MarkedPtr<T, N>) -> Self {
         Self { inner: AtomicMarkedPtr::new(ptr), _marker: PhantomData }
+    }
+
+    /// TODO: Docs...
+    #[inline]
+    pub fn into_owned(self) -> Option<Owned<T, R, N>> {
+        MarkedOption::from(self.inner.load(Ordering::Relaxed))
+            .map(|ptr| Owned { inner: ptr, _marker: PhantomData })
+            .value()
+    }
+
+    /// TODO: Docs...
+    #[inline]
+    pub fn get_mut(&mut self) -> Option<&mut T> {
+        unsafe { self.inner.load(Ordering::Relaxed).as_mut() }
     }
 
     /// Loads a raw marked value from the pointer.
@@ -132,50 +135,6 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         self.inner.load(order)
     }
 
-    #[inline]
-    pub fn load_raw_if_equal(
-        &self,
-        expected: MarkedPtr<T, N>,
-        order: Ordering,
-    ) -> Result<MarkedPtr<T, N>, NotEqualError> {
-        match self.load_raw(order) {
-            ptr if ptr == expected => Ok(ptr),
-            _ => Err(NotEqualError(())),
-        }
-    }
-
-    /// Loads an [`Unprotected`] reference wrapped in a [`MarkedOption`] from
-    /// the `Atomic`.
-    ///
-    /// The returned reference is explicitly **not** protected from reclamation,
-    /// meaning another thread could free the value's memory at any time.
-    ///
-    /// This method is similar to [`load_raw`][Atomic::load_raw], but the
-    /// resulting [`Unprotected`] type has stronger guarantees than a raw
-    /// [`MarkedPtr`].
-    /// It can be useful to load an unprotected pointer if that pointer does not
-    /// need to be de-referenced, but is only used to reinsert it in a different
-    /// spot, which is e.g. done when removing a value from a linked list.
-    ///
-    /// `load_unprotected_marked_option` takes an [`Ordering`] argument, which
-    /// describes the memory ordering of this operation.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `order` is [`Release`][release] or [`AcqRel`][acq_rel].
-    ///
-    /// [ordering]: core::sync::atomic::Ordering
-    /// [release]: core::sync::atomic::Ordering::Release
-    /// [acq_rel]: core::sync::atomic::Ordering::AcqRel
-    #[inline]
-    pub fn load_unprotected_marked_option(
-        &self,
-        order: Ordering,
-    ) -> MarkedOption<Unprotected<T, R, N>> {
-        MarkedOption::from(self.inner.load(order))
-            .map(|ptr| Unprotected { inner: ptr, _marker: PhantomData })
-    }
-
     /// Loads an optional [`Unprotected`] reference from the `Atomic`.
     ///
     /// The returned reference is explicitly **not** protected from reclamation,
@@ -196,48 +155,8 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     /// Panics if `order` is [`Release`][Ordering::Release] or
     /// [`AcqRel`][Ordering::AcqRel].
     #[inline]
-    pub fn load_unprotected(&self, order: Ordering) -> Option<Unprotected<T, R, N>> {
-        self.load_unprotected_marked_option(order).value()
-    }
-
-    /// Loads a value from the pointer and uses `guard` to protect it.
-    /// The (optional) protected [`Shared`] value is wrapped in a [`Marked].
-    ///
-    /// If the loaded value is non-null, the value is guaranteed to be protected
-    /// from reclamation during the lifetime of `guard`.
-    ///
-    /// The primary difference to [`load`][Atomic::load] is, that the returned
-    /// [`Marked`] type is additionally able to represent marked `null`
-    /// pointers.
-    ///
-    /// `load_marked` takes an [`Ordering`][ordering] argument, which describes
-    /// the memory ordering of this operation.
-    ///
-    /// # Panics
-    ///
-    /// *May* panic if `order` is [`Release`][release] or [`AcqRel`][acq_rel].
-    ///
-    /// [ordering]: core::sync::atomic::Ordering
-    /// [release]: core::sync::atomic::Ordering::Release
-    /// [acq_rel]: core::sync::atomic::Ordering::AcqRel
-    #[inline]
-    pub fn load_marked_option<'g>(
-        &self,
-        guard: impl GuardRef<'g, Reclaimer = R>,
-        order: Ordering,
-    ) -> MarkedOption<Shared<'g, T, R, N>> {
-        guard.load_protected(self, order)
-    }
-
-    /// TODO: docs...
-    #[inline]
-    pub fn load_marked_option_if_equal<'g>(
-        &self,
-        expected: MarkedPtr<T, N>,
-        guard: impl GuardRef<'g, Reclaimer = R>,
-        order: Ordering,
-    ) -> Result<MarkedOption<Shared<'g, T, R, N>>, NotEqualError> {
-        guard.load_protected_if_equal(self, expected, order)
+    pub fn load_unprotected(&self, order: Ordering) -> Unprotected<T, R, N> {
+        Unprotected { inner: self.load_raw(order), _marker: PhantomData }
     }
 
     /// Loads a value from the pointer and uses `guard` to protect it.
@@ -260,11 +179,12 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         &self,
         guard: impl GuardRef<'g, Reclaimer = R>,
         order: Ordering,
-    ) -> Option<Shared<'g, T, R, N>> {
-        self.load_marked_option(guard, order).value()
+    ) -> Shared<'g, T, R, N> {
+        guard.load_protected(self, order)
     }
 
     /// TODO: docs...
+    #[inline]
     pub fn load_if_equal<'g>(
         &self,
         expected: MarkedPtr<T, N>,
@@ -294,36 +214,10 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn store(
         &self,
-        ptr: impl SharedPointer<Item = T, MarkBits = N, Reclaimer = R>,
+        ptr: impl StoreArg<Item = T, MarkBits = N, Reclaimer = R>,
         order: Ordering,
     ) {
         self.inner.store(ptr.into_marked_ptr(), order);
-    }
-
-    /// Stores either `null` or a valid pointer to an owned heap allocated value
-    /// into the pointer, returning the previous (now [`Unlinked`]) value
-    /// wrapped in a [`MarkedOption`].
-    ///
-    /// The returned value can be safely reclaimed as long as the *uniqueness*
-    /// invariant is maintained.
-    ///
-    /// `swap` takes an [`Ordering`][ordering] argument which describes the memory
-    /// ordering of this operation. All ordering modes are possible. Note that using
-    /// [`Acquire`][acquire] makes the store part of this operation [`Relaxed`][relaxed],
-    /// and using [`Release`][release] makes the load part [`Relaxed`][relaxed].
-    ///
-    /// [ordering]: Ordering
-    /// [relaxed]: Ordering::Relaxed
-    /// [acquire]: Ordering::Acquire
-    /// [release]: Ordering::Release
-    #[inline]
-    pub fn swap_marked_option(
-        &self,
-        ptr: impl SharedPointer<Item = T, Reclaimer = R, MarkBits = N>,
-        order: Ordering,
-    ) -> MarkedOption<Unlinked<T, R, N>> {
-        let prev = self.inner.swap(ptr.into_marked_ptr(), order);
-        MarkedOption::from(prev).map(|ptr| Unlinked { inner: ptr, _marker: PhantomData })
     }
 
     /// Stores either `null` or a valid pointer to an owned heap allocated value
@@ -345,31 +239,29 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn swap(
         &self,
-        ptr: impl SharedPointer<Item = T, Reclaimer = R, MarkBits = N>,
+        ptr: impl StoreArg<Item = T, Reclaimer = R, MarkBits = N>,
         order: Ordering,
-    ) -> Option<Unlinked<T, R, N>> {
-        self.swap_marked_option(ptr, order).value()
+    ) -> MarkedOption<Unlinked<T, R, N>> {
+        MarkedOption::from(self.inner.swap(ptr.into_marked_ptr(), order)).map(|inner| Unlinked { inner, _marker: PhantomData })
     }
 
     /// TODO: docs...
     #[inline]
-    pub fn compare_exchange<C, I>(
+    pub fn compare_exchange<S: StoreArg<Item = T, Reclaimer = R, MarkBits = N>>(
         &self,
-        current: C,
-        new: I,
+        current: impl CompareArg<Item = T, Reclaimer = R, MarkBits = N>,
+        new: S,
         success: Ordering,
         failure: Ordering,
-    ) -> Result<C::Success, CompareExchangeError<C, I>>
-    where
-        C: CompareAndSwap<Item = T, Reclaimer = R, MarkBits = N>,
-        I: SharedPointer<Item = T, Reclaimer = R, MarkBits = N>,
+    ) -> Result<MarkedOption<Unlinked<T, R, N>>, CompareExchangeError<S, T, R, N>>
     {
+        let current = current.into_marked_ptr();
         let new = ManuallyDrop::new(new);
         self.inner
-            .compare_exchange(current.into_marked_ptr(), new.as_marked_ptr(), success, failure)
-            .map(|ptr| unsafe { <C::Success as SharedPointer>::from_marked_ptr(ptr) })
-            .map_err(|ptr| CompareExchangeError {
-                loaded: unsafe { MarkedOption::from_marked_ptr(ptr) },
+            .compare_exchange(current, new.as_marked_ptr(), success, failure)
+            .map(|_| MarkedOption::from(current).map(|inner| Unlinked { inner, _marker: PhantomData }))
+            .map_err(|inner| CompareExchangeError {
+                loaded: Unprotected { inner, _marker: PhantomData },
                 input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
@@ -377,23 +269,21 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
 
     /// TODO: docs...
     #[inline]
-    pub fn compare_exchange_weak<C, I>(
+    pub fn compare_exchange_weak<S: StoreArg<Item = T, Reclaimer = R, MarkBits = N>>(
         &self,
-        current: C,
-        new: I,
+        current: impl CompareArg<Item = T, Reclaimer = R, MarkBits = N>,
+        new: S,
         success: Ordering,
         failure: Ordering,
-    ) -> Result<C::Success, CompareExchangeError<C, I>>
-    where
-        C: CompareAndSwap<Item = T, Reclaimer = R, MarkBits = N>,
-        I: SharedPointer<Item = T, Reclaimer = R, MarkBits = N>,
+    ) -> Result<MarkedOption<Unlinked<T, R, N>>, CompareExchangeError<S, T, R, N>>
     {
+        let current = current.into_marked_ptr();
         let new = ManuallyDrop::new(new);
         self.inner
-            .compare_exchange_weak(current.into_marked_ptr(), new.as_marked_ptr(), success, failure)
-            .map(|ptr| unsafe { <C::Success as SharedPointer>::from_marked_ptr(ptr) })
-            .map_err(|ptr| CompareExchangeError {
-                loaded: unsafe { MarkedOption::from_marked_ptr(ptr) },
+            .compare_exchange_weak(current, new.as_marked_ptr(), success, failure)
+            .map(|_| MarkedOption::from(current).map(|inner| Unlinked { inner, _marker: PhantomData }))
+            .map_err(|inner| CompareExchangeError {
+                loaded: Unprotected { inner, _marker: PhantomData },
                 input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
@@ -452,15 +342,16 @@ impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {
 /// The returned error type for a failed [`compare_exchange`](Atomic::compare_exchange) or
 /// [`compare_exchange_weak`](Atomic::compare_exchange_weak) operation.
 #[derive(Copy, Clone, Debug)]
-pub struct CompareExchangeError<C, I>
+pub struct CompareExchangeError<S, T, R, N>
 where
-    C: CompareAndSwap,
-    I: SharedPointer,
+    R: Reclaimer,
+    N: Unsigned,
+    S: StoreArg<Item = T, Reclaimer = R, MarkBits = N>,
 {
     /// The actually loaded value
-    pub loaded: MarkedOption<Unprotected<C::Item, C::Reclaimer, C::MarkBits>>,
+    pub loaded: Unprotected<T, R, N>,
     /// The value with which the failed swap was attempted
-    pub input: I,
+    pub input: S,
     // prevents construction outside of the current module
     _private: (),
 }

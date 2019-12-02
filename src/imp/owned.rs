@@ -3,6 +3,7 @@ use core::convert::{AsMut, AsRef, TryFrom};
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
+use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 
 #[cfg(not(feature = "std"))]
@@ -37,15 +38,8 @@ unsafe impl<T, R: Reclaimer, N: Unsigned> Sync for Owned<T, R, N> where T: Sync 
 /********** impl inherent *************************************************************************/
 
 impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
-    /// Allocates memory for a [`Record<T>`](Record) on the heap and then
-    /// places a record with a default header and `owned` into it.
-    ///
-    /// This does only allocate memory if at least one of
-    /// [`RecordHeader`][header] or `T` are not zero-sized.
-    /// If the [`RecordHeader`][header] is a ZST, this behaves
-    /// identically to `Box::new`.
-    ///
-    /// [header]: crate::LocalReclaim::RecordHeader
+    /// Creates a new heap-allocated [`Record<T>`](Record) and returns an owning
+    /// handle to it.
     #[inline]
     pub fn new(owned: T) -> Self {
         let record = Self::alloc_record(owned);
@@ -77,7 +71,7 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     /// atomic.store(owned, Ordering::Relaxed);
     /// let shared = atomic.load_shared(Ordering::Relaxed);
     ///
-    /// assert_eq!((&"string", 0b1), Shared::decompose_ref(shared.unwrap()));
+    /// assert_eq!((&"string", 0b1), shared.unwrap().decompose_ref());
     /// ```
     #[inline]
     pub fn with_tag(owned: T, tag: usize) -> Self {
@@ -87,21 +81,87 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
         }
     }
 
+    #[inline]
+    pub unsafe fn from_marked_ptr(ptr: MarkedPtr<T, N>) -> Self {
+        Self { inner: MarkedNonNull::new_unchecked(ptr), _marker: PhantomData }
+    }
+
+    #[inline]
+    pub unsafe fn from_marked_non_null(ptr: MarkedNonNull<T, N>) -> Self {
+        Self { inner: ptr, _marker: PhantomData }
+    }
+
     /// Consumes the [`Owned`], de-allocates its memory and extracts the
     /// contained value.
     ///
     /// This has the same semantics as destructuring a [`Box`].
     #[inline]
-    pub fn into_inner(self) -> T {
+    #[allow(clippy::wrong_self_convention)]
+    pub fn into_inner(owned: Self) -> T {
         unsafe {
-            let ptr = self.inner.decompose_ptr();
-            mem::forget(self);
+            let ptr = owned.inner.decompose_ptr();
+            mem::forget(owned);
             let boxed = Box::from_raw(Record::<_, R>::from_raw(ptr).as_ptr());
             (*boxed).elem
         }
     }
 
-    impl_common!();
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
+    pub fn into_marked_ptr(owned: Self) -> MarkedPtr<T, N> {
+        let ptr = owned.inner.into_marked_ptr();
+        mem::forget(owned);
+        ptr
+    }
+
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
+    pub fn into_marked_non_null(owned: Self) -> MarkedNonNull<T, N> {
+        let ptr = owned.inner;
+        mem::forget(owned);
+        ptr
+    }
+
+    #[inline]
+    #[allow(clippy::wrong_self_convention)]
+    pub fn as_marked_ptr(owned: &Self) -> MarkedPtr<T, N> {
+        owned.inner.into_marked_ptr()
+    }
+
+    #[inline]
+    pub fn as_marked_non_null(owned: &Self) -> MarkedNonNull<T, N> {
+        owned.inner
+    }
+
+    #[inline]
+    pub fn tag(owned: &Self) -> usize {
+        owned.inner.decompose_tag()
+    }
+
+    #[inline]
+    pub fn set_tag(owned: Self, tag: usize) -> Self {
+        let inner = owned.inner.set_tag(tag);
+        mem::forget(owned);
+
+        Self { inner, _marker: PhantomData }
+    }
+
+    #[inline]
+    pub fn clear_tag(owned: Self) -> Self {
+        let inner = owned.inner.clear_tag();
+        mem::forget(owned);
+
+        Self { inner, _marker: PhantomData }
+    }
+
+    #[inline]
+    pub fn decompose(owned: Self) -> (Self, usize) {
+        let inner = owned.inner;
+        let tag = inner.decompose_tag();
+        mem::forget(owned);
+
+        (Self { inner: inner.clear_tag(), _marker: PhantomData }, tag)
+    }
 
     /// Decomposes the internal marked pointer, returning a reference and the
     /// separated tag.
@@ -149,39 +209,6 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
         let (ptr, tag) = owned.inner.decompose();
         mem::forget(owned);
         unsafe { (&mut *ptr.as_ptr(), tag) }
-    }
-
-    /// Leaks the `owned` value and turns it into an [`Unprotected`] value,
-    /// which has copy semantics, but can no longer be safely dereferenced.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use core::sync::atomic::Ordering::Relaxed;
-    ///
-    /// use reclaim::typenum::U0;
-    /// use reclaim::{Owned, Shared};
-    ///
-    /// type Atomic<T> = reclaim::leak::Atomic<T, U0>;
-    ///
-    /// let atomic = Atomic::null();
-    ///
-    /// let unprotected = Owned::leak_unprotected(Owned::new("string"));
-    ///
-    /// loop {
-    ///     // `unprotected` is simply copied in every loop iteration
-    ///     if atomic.compare_exchange_weak(Shared::none(), unprotected, Relaxed, Relaxed).is_ok() {
-    ///         break;
-    ///     }
-    /// }
-    ///
-    /// # assert_eq!(&"string", &*atomic.load_shared(Relaxed).unwrap())
-    /// ```
-    #[inline]
-    pub fn leak_unprotected(owned: Self) -> Unprotected<T, R, N> {
-        let inner = owned.inner;
-        mem::forget(owned);
-        Unprotected { inner, _marker: PhantomData }
     }
 
     /// Leaks the `owned` value and turns it into a "protected" [`Shared`][shared]
@@ -235,9 +262,42 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     /// ```
     #[inline]
     pub unsafe fn leak_shared<'a>(owned: Self) -> Shared<'a, T, R, N> {
-        let inner = owned.inner;
+        let inner = owned.inner.into_marked_ptr();
         mem::forget(owned);
         Shared { inner, _marker: PhantomData }
+    }
+
+    /// Leaks the `owned` value and turns it into an [`Unprotected`] value,
+    /// which has copy semantics, but can no longer be safely dereferenced.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use core::sync::atomic::Ordering::Relaxed;
+    ///
+    /// use reclaim::typenum::U0;
+    /// use reclaim::{Owned, Shared};
+    ///
+    /// type Atomic<T> = reclaim::leak::Atomic<T, U0>;
+    ///
+    /// let atomic = Atomic::null();
+    ///
+    /// let unprotected = Owned::leak_unprotected(Owned::new("string"));
+    ///
+    /// loop {
+    ///     // `unprotected` is simply copied in every loop iteration
+    ///     if atomic.compare_exchange_weak(Shared::none(), unprotected, Relaxed, Relaxed).is_ok() {
+    ///         break;
+    ///     }
+    /// }
+    ///
+    /// # assert_eq!(&"string", &*atomic.load_shared(Relaxed).unwrap())
+    /// ```
+    #[inline]
+    pub fn leak_unprotected(owned: Self) -> Unprotected<T, R, N> {
+        let inner = owned.inner.into_marked_ptr();
+        mem::forget(owned);
+        Unprotected { inner, _marker: PhantomData }
     }
 
     /// Allocates a records wrapping `owned` and returns the pointer to the
@@ -246,16 +306,6 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     fn alloc_record(owned: T) -> NonNull<T> {
         let record = Box::leak(Box::new(Record::<_, R>::new(owned)));
         NonNull::from(&record.elem)
-    }
-
-    #[inline]
-    fn deref(&self) -> &T {
-        unsafe { self.inner.as_ref() }
-    }
-
-    #[inline]
-    fn deref_mut(&mut self) -> &mut T {
-        unsafe { self.inner.as_mut() }
     }
 }
 
@@ -314,6 +364,26 @@ where
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (reference, tag) = unsafe { self.inner.decompose_ref() };
         f.debug_struct("Owned").field("value", reference).field("tag", &tag).finish()
+    }
+}
+
+/********** impl Deref ****************************************************************************/
+
+impl<T, R: Reclaimer, N: Unsigned> Deref for Owned<T, R, N> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.inner.as_ref() }
+    }
+}
+
+/********** impl DerefMut *************************************************************************/
+
+impl<T, R: Reclaimer, N: Unsigned> DerefMut for Owned<T, R, N> {
+    #[inline]
+    fn deref_mut(&mut self) -> &Self::Target {
+        unsafe { self.inner.as_mut() }
     }
 }
 

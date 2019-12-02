@@ -26,8 +26,6 @@ impl<T, R, N> Copy for Unprotected<T, R, N> {}
 /********** impl inherent *************************************************************************/
 
 impl<T, R: Reclaimer, N: Unsigned> Unprotected<T, R, N> {
-    impl_common!();
-
     /// Converts the [`Unprotected`] into a ("fake" protected) [`Shared`]
     /// reference with arbitrary lifetime.
     ///

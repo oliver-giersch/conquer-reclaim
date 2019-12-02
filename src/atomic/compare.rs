@@ -2,10 +2,20 @@ use typenum::Unsigned;
 
 use crate::traits::{Reclaimer, SharedPointer};
 use crate::{Shared, Unlinked};
+use conquer_pointer::MarkedPtr;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Compare (trait)
+// CompareArg (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub trait CompareArg {
+    type Item: Sized;
+    type Reclaimer: Reclaimer;
+    type MarkBits: Unsigned;
+
+    fn into_marked_ptr(arg: Self) -> MarkedPtr<Self::Item, Self::MarkBits>;
+    unsafe fn from_marked_ptr(ptr: MarkedPtr<Self::Item, Self::MarkBits>) -> Self;
+}
 
 /// TODO: Docs...
 pub trait CompareAndSwap: SharedPointer {

@@ -1,5 +1,3 @@
-use core::borrow::Borrow;
-use core::convert::AsRef;
 use core::fmt;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
@@ -8,7 +6,7 @@ use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 use typenum::Unsigned;
 
 use crate::internal::Internal;
-use crate::traits::{Reclaimer, SharedPointer};
+use crate::traits::Reclaimer;
 use crate::Shared;
 
 /********** impl Clone ****************************************************************************/
@@ -26,78 +24,67 @@ impl<T, R, N> Copy for Shared<'_, T, R, N> {}
 
 /********** impl inherent *************************************************************************/
 
+impl<T, R, N> Shared<'_, T, R, N> {
+    #[inline]
+    pub const fn null() -> Self {
+        Self { inner: MarkedPtr::null(), _marker: PhantomData }
+    }
+}
+
 impl<'g, T, R: Reclaimer, N: Unsigned> Shared<'g, T, R, N> {
-    impl_common!();
-
-    /// Consumes and decomposes the [`Shared`] reference, returning only the
-    /// reference itself.
-    ///
-    /// # Example
-    ///
-    /// Derefencing a [`Shared`] ties the returned reference to the (shorter)
-    /// lifetime of the `shared` itself.
-    /// Use this function to get a reference with the full lifetime `'g`.
-    ///
-    /// ```
-    /// use core::sync::atomic::Ordering::Relaxed;
-    ///
-    /// use reclaim::prelude::*;
-    /// use reclaim::typenum::U0;
-    /// use reclaim::leak::Shared;
-    ///
-    /// type Atomic<T> = reclaim::leak::Atomic<T, U0>;
-    /// type Guard = reclaim::leak::Guard;
-    ///
-    /// let atomic = Atomic::new("string");
-    ///
-    /// let mut guard = Guard::new();
-    /// let shared = atomic.load(Relaxed, &mut guard);
-    ///
-    /// let reference = shared.unwrap().into_ref();
-    /// assert_eq!(reference, &"string");
-    /// ```
     #[inline]
-    pub fn into_ref(self) -> &'g T {
-        unsafe { &*self.inner.decompose_ptr() }
+    pub unsafe fn from_marked_ptr(ptr: MarkedPtr<T, N>) -> Self {
+        Self { inner: ptr, _marker: PhantomData }
     }
 
-    /// Decomposes the (marked) [`Shared`] reference, returning the reference
-    /// itself and the separated tag.
     #[inline]
-    pub fn decompose_ref(self) -> (&'g T, usize) {
-        unsafe { self.inner.decompose_ref_unbounded() }
+    pub fn is_null(self) -> bool {
+        self.inner.is_null()
     }
 
-    /// Casts the [`Shared`] to a reference to a different type and with a different lifetime.
-    ///
-    /// This can be useful to extend the lifetime of a [`Shared`] in cases the borrow checker is
-    /// unable to correctly determine the relationship between mutable borrows of guards and the
-    /// resulting shared references.
-    ///
-    /// # Safety
-    ///
-    /// The caller has to ensure the cast is valid both in terms of type and lifetime.
     #[inline]
-    pub unsafe fn cast<'h, U>(shared: Self) -> Shared<'h, U, R, N> {
-        Shared { inner: shared.inner.cast(), _marker: PhantomData }
+    pub fn into_marked_ptr(self) -> MarkedPtr<T, N> {
+        self.inner
     }
-}
 
-/********** impl AsRef ****************************************************************************/
-
-impl<T, R, N: Unsigned> AsRef<T> for Shared<'_, T, R, N> {
     #[inline]
-    fn as_ref(&self) -> &T {
-        unsafe { self.inner.as_ref() }
+    pub fn clear_tag(self) -> Self {
+        unimplemented!()
     }
-}
 
-/********** impl Borrow ***************************************************************************/
-
-impl<T, R, N: Unsigned> Borrow<T> for Shared<'_, T, R, N> {
     #[inline]
-    fn borrow(&self) -> &T {
-        self.as_ref()
+    pub fn set_tag(self, tag: usize) -> Self {
+        unimplemented!()
+    }
+
+    #[inline]
+    pub fn decompose(self) -> (Self, usize) {
+        unimplemented!()
+    }
+
+    #[inline]
+    pub fn decompose_tag(self) -> usize {
+        self.inner.decompose_tag()
+    }
+
+    #[inline]
+    pub unsafe fn decompose_ref(self) -> (Option<&'g T>, usize) {
+        self.inner.decompose_ref()
+    }
+
+    #[inline]
+    pub unsafe fn as_ref(self) -> Option<&'g T> {
+        self.inner.as_ref()
+    }
+
+    #[inline]
+    pub unsafe fn deref(self) -> &'g T {
+        &*self.inner.decompose_ptr()
+    }
+
+    #[inline]
+    pub unsafe fn cast<'a, U>(self) -> Shared<'a, U, R, N> {
+        unimplemented!()
     }
 }
 
@@ -120,18 +107,6 @@ impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
     }
-}
-
-/********** impl SharedPointer *******************************************************************/
-
-impl<T, R: Reclaimer, N: Unsigned> SharedPointer for Shared<'_, T, R, N> {
-    impl_shared_pointer!();
-}
-
-/********** impl MarkedNonNullable ****************************************************************/
-
-impl<T, R, N: Unsigned> MarkedNonNullable for Shared<'_, T, R, N> {
-    impl_marked_non_nullable!();
 }
 
 /********** impl NonNullable **********************************************************************/

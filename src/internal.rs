@@ -29,40 +29,6 @@ impl<P, T, R: Reclaimer, N: Unsigned> Internal for MarkedOption<P> where
 
 /********** implementation macros *****************************************************************/
 
-macro_rules! impl_common {
-    () => {
-        /// Creates a `None` variant for this type.
-        ///
-        /// # Examples
-        ///
-        /// When storing a `null` pointer into an [`Atomic`][atomic] by calling
-        /// e.g. [`store`][store] or one of the swapping methods, the compiler
-        /// is usually unable to infer the correct type for a simple
-        /// [`None`][Option::None] argument.
-        ///
-        /// ```
-        /// use std::sync::atomic::Ordering;
-        ///
-        /// type Atomic<T> = reclaim::leak::Atomic<T, reclaim::typenum::U0>;
-        /// type Owned<T> = reclaim::leak::Owned<T, reclaim::typenum::U0>;
-        /// type Unlinked<T> = reclaim::leak::Unlinked<T, reclaim::typenum::U0>;
-        ///
-        /// let atomic = Atomic::new(1);
-        /// let swap = atomic.swap(Owned::none(), Ordering::Relaxed).unwrap();
-        ///
-        /// assert_eq!(swap.as_ref(), &1);
-        /// unsafe { Unlinked::retire(swap) }; // leaks memory
-        /// ```
-        ///
-        /// [atomic]: crate::atomic::Atomic
-        /// [store]:  crate::atomic::Atomic::store
-        #[inline]
-        pub fn none() -> Option<Self> {
-            None
-        }
-    };
-}
-
 macro_rules! impl_marked_non_nullable {
     () => {
         type MarkBits = N;

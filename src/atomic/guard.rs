@@ -1,13 +1,12 @@
+use core::marker::PhantomData;
 use core::sync::atomic::Ordering;
 
 use conquer_pointer::{MarkedOption, MarkedPtr};
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
-
 use crate::traits::{Protect, ProtectRegion, Reclaimer};
-use crate::{AcquireResult, Shared};
-use std::marker::PhantomData;
+use crate::{Shared, NotEqualError};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // GuardRef (trait)
@@ -29,7 +28,7 @@ pub trait GuardRef<'g> {
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
-    ) -> MarkedOption<Shared<'g, T, Self::Reclaimer, N>>;
+    ) -> Shared<'g, T, Self::Reclaimer, N>;
 
     /// TODO: Docs...
     fn load_protected_if_equal<T, N: Unsigned>(
@@ -37,7 +36,7 @@ pub trait GuardRef<'g> {
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> AcquireResult<'g, T, Self::Reclaimer, N>;
+    ) -> Result<Shared<'g, T, Self::Reclaimer, N>, NotEqualError>;
 }
 
 /********** impl blanket (Protect) ****************************************************************/
@@ -53,7 +52,7 @@ where
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
-    ) -> MarkedOption<Shared<'g, T, Self::Reclaimer, N>> {
+    ) -> Shared<'g, T, Self::Reclaimer, N> {
         self.protect(atomic, order)
     }
 
@@ -63,7 +62,7 @@ where
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> AcquireResult<'g, T, Self::Reclaimer, N> {
+    ) -> Result<Shared<'g, T, Self::Reclaimer, N>, NotEqualError> {
         self.protect_if_equal(atomic, expected, order)
     }
 }
@@ -81,10 +80,8 @@ where
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
-    ) -> MarkedOption<Shared<'g, T, Self::Reclaimer, N>> {
-        atomic
-            .load_unprotected_marked_option(order)
-            .map(|unprotected| unsafe { unprotected.into_shared() })
+    ) -> Shared<'g, T, Self::Reclaimer, N> {
+        Shared { inner: atomic.load_raw(order), _marker: PhantomData }
     }
 
     #[inline]
@@ -93,9 +90,7 @@ where
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> AcquireResult<'g, T, Self::Reclaimer, N> {
-        atomic.load_raw_if_equal(expected, order).map(|ptr| {
-            MarkedOption::from(ptr).map(|ptr| Shared { inner: ptr, _marker: PhantomData })
-        })
+    ) -> Result<Shared<'g, T, Self::Reclaimer, N>, NotEqualError> {
+        atomic.load_raw_if_equal(expected, order).map(|ptr| Shared { inner: ptr, _marker: PhantomData })
     }
 }
