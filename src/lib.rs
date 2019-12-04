@@ -10,7 +10,7 @@ pub mod prelude {
     //! TODO: docs...
 
     pub use crate::traits::{
-        GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle, SharedPointer,
+        GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
     };
 }
 
@@ -112,7 +112,7 @@ pub struct Unlinked<T, R, N> {
 /// have been *valid* references.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub struct Unprotected<T, R, N> {
-    inner: MarkedNonNull<T, N>,
+    inner: MarkedPtr<T, N>,
     _marker: PhantomData<R>,
 }
 

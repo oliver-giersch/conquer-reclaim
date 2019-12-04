@@ -7,16 +7,16 @@ use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{AtomicMarkedPtr, MarkedOption, MarkedPtr, MarkedNonNull};
+use conquer_pointer::{AtomicMarkedPtr, MarkedNonNull, MarkedPtr, MaybeNull};
 use typenum::Unsigned;
 
 pub use self::compare::CompareAndSwap;
 pub use self::guard::GuardRef;
 pub use self::store::StoreArg;
 
+use crate::atomic::compare::CompareArg;
 use crate::traits::{Reclaimer, SharedPointer};
 use crate::{NotEqualError, Owned, Shared, Unlinked, Unprotected};
-use crate::atomic::compare::CompareArg;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Atomic
@@ -179,7 +179,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         &self,
         guard: impl GuardRef<'g, Reclaimer = R>,
         order: Ordering,
-    ) -> Shared<'g, T, R, N> {
+    ) -> MaybeNull<Shared<'g, T, R, N>> {
         guard.load_protected(self, order)
     }
 
@@ -241,8 +241,9 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         &self,
         ptr: impl StoreArg<Item = T, Reclaimer = R, MarkBits = N>,
         order: Ordering,
-    ) -> MarkedOption<Unlinked<T, R, N>> {
-        MarkedOption::from(self.inner.swap(ptr.into_marked_ptr(), order)).map(|inner| Unlinked { inner, _marker: PhantomData })
+    ) -> MaybeNull<Unlinked<T, R, N>> {
+        MarkedOption::from(self.inner.swap(ptr.into_marked_ptr(), order))
+            .map(|inner| Unlinked { inner, _marker: PhantomData })
     }
 
     /// TODO: docs...
@@ -253,13 +254,14 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         new: S,
         success: Ordering,
         failure: Ordering,
-    ) -> Result<MarkedOption<Unlinked<T, R, N>>, CompareExchangeError<S, T, R, N>>
-    {
+    ) -> Result<MarkedOption<Unlinked<T, R, N>>, CompareExchangeError<S, T, R, N>> {
         let current = current.into_marked_ptr();
         let new = ManuallyDrop::new(new);
         self.inner
             .compare_exchange(current, new.as_marked_ptr(), success, failure)
-            .map(|_| MarkedOption::from(current).map(|inner| Unlinked { inner, _marker: PhantomData }))
+            .map(|_| {
+                MarkedOption::from(current).map(|inner| Unlinked { inner, _marker: PhantomData })
+            })
             .map_err(|inner| CompareExchangeError {
                 loaded: Unprotected { inner, _marker: PhantomData },
                 input: ManuallyDrop::into_inner(new),
@@ -275,13 +277,14 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         new: S,
         success: Ordering,
         failure: Ordering,
-    ) -> Result<MarkedOption<Unlinked<T, R, N>>, CompareExchangeError<S, T, R, N>>
-    {
+    ) -> Result<MarkedOption<Unlinked<T, R, N>>, CompareExchangeError<S, T, R, N>> {
         let current = current.into_marked_ptr();
         let new = ManuallyDrop::new(new);
         self.inner
             .compare_exchange_weak(current, new.as_marked_ptr(), success, failure)
-            .map(|_| MarkedOption::from(current).map(|inner| Unlinked { inner, _marker: PhantomData }))
+            .map(|_| {
+                MarkedOption::from(current).map(|inner| Unlinked { inner, _marker: PhantomData })
+            })
             .map_err(|inner| CompareExchangeError {
                 loaded: Unprotected { inner, _marker: PhantomData },
                 input: ManuallyDrop::into_inner(new),

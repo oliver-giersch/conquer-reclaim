@@ -1,12 +1,12 @@
 use core::marker::PhantomData;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{MarkedOption, MarkedPtr};
+use conquer_pointer::{MarkedPtr, MaybeNull};
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
 use crate::traits::{Protect, ProtectRegion, Reclaimer};
-use crate::{Shared, NotEqualError};
+use crate::{NotEqualError, Shared};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // GuardRef (trait)
@@ -28,7 +28,7 @@ pub trait GuardRef<'g> {
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
-    ) -> Shared<'g, T, Self::Reclaimer, N>;
+    ) -> MaybeNull<Shared<'g, T, Self::Reclaimer, N>>;
 
     /// TODO: Docs...
     fn load_protected_if_equal<T, N: Unsigned>(
@@ -36,7 +36,7 @@ pub trait GuardRef<'g> {
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<Shared<'g, T, Self::Reclaimer, N>, NotEqualError>;
+    ) -> Result<MaybeNull<Shared<'g, T, Self::Reclaimer, N>>, NotEqualError>;
 }
 
 /********** impl blanket (Protect) ****************************************************************/
@@ -52,7 +52,7 @@ where
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
-    ) -> Shared<'g, T, Self::Reclaimer, N> {
+    ) -> MaybeNull<Shared<'g, T, Self::Reclaimer, N>> {
         self.protect(atomic, order)
     }
 
@@ -62,7 +62,7 @@ where
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<Shared<'g, T, Self::Reclaimer, N>, NotEqualError> {
+    ) -> Result<MaybeNull<Shared<'g, T, Self::Reclaimer, N>>, NotEqualError> {
         self.protect_if_equal(atomic, expected, order)
     }
 }
@@ -80,8 +80,8 @@ where
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
-    ) -> Shared<'g, T, Self::Reclaimer, N> {
-        Shared { inner: atomic.load_raw(order), _marker: PhantomData }
+    ) -> MaybeNull<Shared<'g, T, Self::Reclaimer, N>> {
+        MaybeNull::from(atomic.load_raw(order)).map(|inner| Shared { inner, _marker: PhantomData })
     }
 
     #[inline]
@@ -91,6 +91,8 @@ where
         expected: MarkedPtr<T, N>,
         order: Ordering,
     ) -> Result<Shared<'g, T, Self::Reclaimer, N>, NotEqualError> {
-        atomic.load_raw_if_equal(expected, order).map(|ptr| Shared { inner: ptr, _marker: PhantomData })
+        atomic
+            .load_raw_if_equal(expected, order)
+            .map(|ptr| Shared { inner: ptr, _marker: PhantomData })
     }
 }
