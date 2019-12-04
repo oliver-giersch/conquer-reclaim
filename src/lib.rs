@@ -9,9 +9,7 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
-    pub use crate::traits::{
-        GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
-    };
+    pub use crate::traits::{GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle};
 }
 
 #[macro_use]
@@ -123,3 +121,8 @@ pub struct Unprotected<T, R, N> {
 /// TODO: Docs...
 #[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct NotEqualError(());
+
+#[inline(always)]
+pub fn null<T, R: Reclaimer, N: Unsigned>() -> Unprotected<T, N, R> {
+    Unprotected::null()
+}

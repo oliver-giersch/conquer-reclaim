@@ -2,9 +2,8 @@ use core::marker::PhantomData;
 use core::sync::atomic::Ordering;
 
 use conquer_pointer::{
-    MarkedNonNull, MarkedNonNullable,
-    MarkedOption::{Null, Value},
-    MarkedPtr,
+    MarkedNonNull, MarkedNonNullable, MarkedPtr,
+    MaybeNull::{NotNull, Null},
 };
 use typenum::Unsigned;
 

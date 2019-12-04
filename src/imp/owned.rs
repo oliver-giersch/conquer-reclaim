@@ -17,7 +17,7 @@ use typenum::Unsigned;
 use crate::atomic::Atomic;
 use crate::internal::Internal;
 use crate::record::Record;
-use crate::traits::{Reclaimer, SharedPointer};
+use crate::traits::Reclaimer;
 use crate::{Owned, Shared, Unprotected};
 
 /********** impl Clone ****************************************************************************/
@@ -81,15 +81,7 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
         }
     }
 
-    #[inline]
-    pub unsafe fn from_marked_ptr(ptr: MarkedPtr<T, N>) -> Self {
-        Self { inner: MarkedNonNull::new_unchecked(ptr), _marker: PhantomData }
-    }
-
-    #[inline]
-    pub unsafe fn from_marked_non_null(ptr: MarkedNonNull<T, N>) -> Self {
-        Self { inner: ptr, _marker: PhantomData }
-    }
+    impl_common_from!();
 
     /// Consumes the [`Owned`], de-allocates its memory and extracts the
     /// contained value.
@@ -147,20 +139,19 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     }
 
     #[inline]
+    pub fn split_tag(owned: Self) -> (Self, usize) {
+        let (inner, tag) = owned.inner.split_tag();
+        mem::forget(owned);
+
+        (Self { inner, _marker: PhantomData }, tag)
+    }
+
+    #[inline]
     pub fn clear_tag(owned: Self) -> Self {
         let inner = owned.inner.clear_tag();
         mem::forget(owned);
 
         Self { inner, _marker: PhantomData }
-    }
-
-    #[inline]
-    pub fn decompose(owned: Self) -> (Self, usize) {
-        let inner = owned.inner;
-        let tag = inner.decompose_tag();
-        mem::forget(owned);
-
-        (Self { inner: inner.clear_tag(), _marker: PhantomData }, tag)
     }
 
     /// Decomposes the internal marked pointer, returning a reference and the
@@ -171,8 +162,8 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     /// ```
     /// use core::sync::atomic::Ordering::Relaxed;
     ///
-    /// use reclaim::typenum::U1;
-    /// use reclaim::leak::Owned;
+    /// use conquer_reclaim::typenum::U1;
+    /// use conquer_reclaim::leak::Owned;
     ///
     /// type Atomic<T> = reclaim::leak::Atomic<T, U1>;
     ///
@@ -236,8 +227,8 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     /// ```
     /// use core::sync::atomic::Ordering::Relaxed;
     ///
-    /// use reclaim::typenum::U0;
-    /// use reclaim::{Owned, Shared};
+    /// use conquer_reclaim::typenum::U0;
+    /// use conquer_reclaim::{Owned, Shared};
     ///
     /// type Atomic<T> = reclaim::leak::Atomic<T, U0>;
     ///
@@ -262,42 +253,9 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     /// ```
     #[inline]
     pub unsafe fn leak_shared<'a>(owned: Self) -> Shared<'a, T, R, N> {
-        let inner = owned.inner.into_marked_ptr();
+        let inner = owned.inner;
         mem::forget(owned);
         Shared { inner, _marker: PhantomData }
-    }
-
-    /// Leaks the `owned` value and turns it into an [`Unprotected`] value,
-    /// which has copy semantics, but can no longer be safely dereferenced.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use core::sync::atomic::Ordering::Relaxed;
-    ///
-    /// use reclaim::typenum::U0;
-    /// use reclaim::{Owned, Shared};
-    ///
-    /// type Atomic<T> = reclaim::leak::Atomic<T, U0>;
-    ///
-    /// let atomic = Atomic::null();
-    ///
-    /// let unprotected = Owned::leak_unprotected(Owned::new("string"));
-    ///
-    /// loop {
-    ///     // `unprotected` is simply copied in every loop iteration
-    ///     if atomic.compare_exchange_weak(Shared::none(), unprotected, Relaxed, Relaxed).is_ok() {
-    ///         break;
-    ///     }
-    /// }
-    ///
-    /// # assert_eq!(&"string", &*atomic.load_shared(Relaxed).unwrap())
-    /// ```
-    #[inline]
-    pub fn leak_unprotected(owned: Self) -> Unprotected<T, R, N> {
-        let inner = owned.inner.into_marked_ptr();
-        mem::forget(owned);
-        Unprotected { inner, _marker: PhantomData }
     }
 
     /// Allocates a records wrapping `owned` and returns the pointer to the
@@ -428,12 +386,6 @@ impl<T, R: Reclaimer, N: Unsigned> TryFrom<Atomic<T, R, N>> for Owned<T, R, N> {
     }
 }
 
-/********** impl SharedPointer *******************************************************************/
-
-impl<T, R: Reclaimer, N: Unsigned> SharedPointer for Owned<T, R, N> {
-    impl_shared_pointer!();
-}
-
 /********** impl MarkedNonNullable ****************************************************************/
 
 impl<T, R: Reclaimer, N: Unsigned> MarkedNonNullable for Owned<T, R, N> {
@@ -445,7 +397,3 @@ impl<T, R: Reclaimer, N: Unsigned> MarkedNonNullable for Owned<T, R, N> {
 impl<T, R: Reclaimer, N: Unsigned> NonNullable for Owned<T, R, N> {
     impl_non_nullable!();
 }
-
-/********** impl Internal *************************************************************************/
-
-impl<T, R: Reclaimer, N: Unsigned> Internal for Owned<T, R, N> {}

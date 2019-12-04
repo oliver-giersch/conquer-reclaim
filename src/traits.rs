@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MaybeNull, MarkedPtr};
+use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, MaybeNull};
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
@@ -24,6 +24,7 @@ pub unsafe trait GlobalReclaimer: GenericReclaimer {
 // GenericReclaimer (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// TODO: docs...
 pub unsafe trait GenericReclaimer: Reclaimer {
     /// TODO: docs...
     type Handle: ReclaimerHandle<Reclaimer = Self>;
@@ -77,7 +78,8 @@ pub unsafe trait Protect: Clone + Sized {
     fn release(&mut self);
 
     /// TODO: Docs...
-    fn protect<T, N: Unsigned>(&mut self,
+    fn protect<T, N: Unsigned>(
+        &mut self,
         src: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
     ) -> MaybeNull<Shared<T, Self::Reclaimer, N>>;

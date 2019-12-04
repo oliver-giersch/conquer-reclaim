@@ -25,33 +25,17 @@ impl<T, R, N> Copy for Unprotected<T, R, N> {}
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> Unprotected<T, R, N> {
-    /// Converts the [`Unprotected`] into a ("fake" protected) [`Shared`]
-    /// reference with arbitrary lifetime.
-    ///
-    /// # Safety
-    ///
-    /// The returned reference is not in fact protected and could be reclaimed
-    /// by other threads, so the caller has to ensure no concurrent reclamation
-    /// is possible.
+impl<T, R, N> Unprotected<T, R, N> {
     #[inline]
-    pub unsafe fn into_shared<'a>(self) -> Shared<'a, T, R, N> {
-        Shared { inner: self.inner, _marker: PhantomData }
+    pub const fn null() -> Self {
+        Self { inner: MarkedPtr::null(), _marker: PhantomData }
     }
+}
 
-    /// Casts the [`Unprotected`] into a reference to a different type.
-    ///
-    /// # Panics
-    ///
-    /// This method panics if the alignment of `U` does not allow storing the
-    /// required `N` mark bits.
+impl<T, R: Reclaimer, N: Unsigned> Unprotected<T, R, N> {
     #[inline]
-    pub fn cast<U>(unprotected: Self) -> Unprotected<U, R, N> {
-        assert!(
-            mem::align_of::<U>().trailing_zeros() as usize >= N::USIZE,
-            "not enough available free bits in `U`"
-        );
-        Unprotected { inner: unprotected.inner.cast(), _marker: PhantomData }
+    pub fn is_null(self) -> bool {
+        self.inner.is_null()
     }
 }
 
@@ -74,23 +58,17 @@ impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Unprotected<T, R, N> {
     }
 }
 
-/********** impl SharedPointer *******************************************************************/
-
-impl<T, R: Reclaimer, N: Unsigned> SharedPointer for Unprotected<T, R, N> {
-    impl_shared_pointer!();
-}
-
 /********** impl MarkedNonNullable ****************************************************************/
 
-impl<T, R, N: Unsigned> MarkedNonNullable for Unprotected<T, R, N> {
+/*impl<T, R, N: Unsigned> MarkedNonNullable for Unprotected<T, R, N> {
     impl_marked_non_nullable!();
-}
+}*/
 
 /********** impl NonNullable **********************************************************************/
 
-impl<T, R, N: Unsigned> NonNullable for Unprotected<T, R, N> {
+/*impl<T, R, N: Unsigned> NonNullable for Unprotected<T, R, N> {
     impl_non_nullable!();
-}
+}*/
 
 /********** impl Internal *************************************************************************/
 
