@@ -1,7 +1,10 @@
 use core::marker::PhantomData;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{MarkedPtr, MaybeNull};
+use conquer_pointer::{
+    MarkedPtr,
+    MaybeNull::{self, NotNull},
+};
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
@@ -90,9 +93,12 @@ where
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<Shared<'g, T, Self::Reclaimer, N>, NotEqualError> {
-        atomic
-            .load_raw_if_equal(expected, order)
-            .map(|ptr| Shared { inner: ptr, _marker: PhantomData })
+    ) -> Result<MaybeNull<Shared<'g, T, Self::Reclaimer, N>>, NotEqualError> {
+        match MaybeNull::from(atomic.load_raw(order)) {
+            MaybeNull::NotNull(ptr) if ptr.into_marked_ptr() == expected => {
+                Ok(NotNull(Shared { inner: ptr, _marker: PhantomData }))
+            }
+            _ => Err(NotEqualError(())),
+        }
     }
 }

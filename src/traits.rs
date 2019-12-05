@@ -1,10 +1,9 @@
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, MaybeNull};
+use conquer_pointer::{MarkedPtr, MaybeNull};
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
-use crate::internal::Internal;
 use crate::retired::Retired;
 use crate::Shared;
 

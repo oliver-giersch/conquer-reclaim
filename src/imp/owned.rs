@@ -15,10 +15,9 @@ use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable, 
 use typenum::Unsigned;
 
 use crate::atomic::Atomic;
-use crate::internal::Internal;
 use crate::record::Record;
 use crate::traits::Reclaimer;
-use crate::{Owned, Shared, Unprotected};
+use crate::{Owned, Shared};
 
 /********** impl Clone ****************************************************************************/
 
@@ -340,7 +339,7 @@ impl<T, R: Reclaimer, N: Unsigned> Deref for Owned<T, R, N> {
 
 impl<T, R: Reclaimer, N: Unsigned> DerefMut for Owned<T, R, N> {
     #[inline]
-    fn deref_mut(&mut self) -> &Self::Target {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.inner.as_mut() }
     }
 }

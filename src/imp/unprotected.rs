@@ -1,14 +1,11 @@
 use core::fmt;
 use core::marker::PhantomData;
-use core::mem;
-use core::ptr::NonNull;
 
-use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
+use conquer_pointer::MarkedPtr;
 use typenum::Unsigned;
 
-use crate::internal::Internal;
-use crate::traits::{Reclaimer, SharedPointer};
-use crate::{Shared, Unprotected};
+use crate::traits::Reclaimer;
+use crate::Unprotected;
 
 /********** impl Clone ****************************************************************************/
 
@@ -57,19 +54,3 @@ impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Unprotected<T, R, N> {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
     }
 }
-
-/********** impl MarkedNonNullable ****************************************************************/
-
-/*impl<T, R, N: Unsigned> MarkedNonNullable for Unprotected<T, R, N> {
-    impl_marked_non_nullable!();
-}*/
-
-/********** impl NonNullable **********************************************************************/
-
-/*impl<T, R, N: Unsigned> NonNullable for Unprotected<T, R, N> {
-    impl_non_nullable!();
-}*/
-
-/********** impl Internal *************************************************************************/
-
-impl<T, R, N: Unsigned> Internal for Unprotected<T, R, N> {}

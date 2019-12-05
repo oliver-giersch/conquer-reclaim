@@ -7,16 +7,13 @@ use core::marker::PhantomData;
 use core::mem::{self, ManuallyDrop};
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{AtomicMarkedPtr, MarkedNonNull, MarkedPtr, MaybeNull};
+use conquer_pointer::{AtomicMarkedPtr, MarkedPtr, MaybeNull};
 use typenum::Unsigned;
 
-pub use self::compare::CompareAndSwap;
-pub use self::guard::GuardRef;
-pub use self::store::StoreArg;
-
-use crate::atomic::compare::CompareArg;
 use crate::traits::Reclaimer;
 use crate::{NotEqualError, Owned, Shared, Unlinked, Unprotected};
+
+use self::{compare::CompareArg, guard::GuardRef, store::StoreArg};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Atomic
@@ -86,9 +83,9 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     /// TODO: Docs...
     #[inline]
     pub fn into_owned(self) -> Option<Owned<T, R, N>> {
-        MarkedOption::from(self.inner.load(Ordering::Relaxed))
+        MaybeNull::from(self.inner.load(Ordering::Relaxed))
             .map(|ptr| Owned { inner: ptr, _marker: PhantomData })
-            .value()
+            .non_null()
     }
 
     /// TODO: Docs...
@@ -100,9 +97,9 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     /// TODO: docs...
     #[inline]
     pub fn take(&mut self) -> Option<Owned<T, R, N>> {
-        MarkedOption::from(self.inner.swap(MarkedPtr::null(), Ordering::Relaxed))
+        MaybeNull::from(self.inner.swap(MarkedPtr::null(), Ordering::Relaxed))
             .map(|ptr| Owned { inner: ptr, _marker: PhantomData })
-            .value()
+            .non_null()
     }
 
     /// Loads a raw marked value from the pointer.
@@ -198,8 +195,8 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         expected: MarkedPtr<T, N>,
         guard: impl GuardRef<'g, Reclaimer = R>,
         order: Ordering,
-    ) -> Result<Option<Shared<'g, T, R, N>>, NotEqualError> {
-        self.load_marked_option_if_equal(expected, guard, order).map(MarkedOption::value)
+    ) -> Result<MaybeNull<Shared<'g, T, R, N>>, NotEqualError> {
+        guard.load_protected_if_equal(self, expected, order)
     }
 
     /// Stores either `null` or a valid pointer to an owned heap allocated value
@@ -227,7 +224,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     ) {
         let store = ptr.as_marked_ptr();
         mem::forget(ptr);
-        self.inner.store(ptr.into_marked_ptr(), order);
+        self.inner.store(store, order);
     }
 
     /// Stores either `null` or a valid pointer to an owned heap allocated value
@@ -262,7 +259,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn compare_exchange<C, S>(
         &self,
-        current: impl CompareArg<Item = T, Reclaimer = R, MarkBits = N>,
+        current: C,
         new: S,
         success: Ordering,
         failure: Ordering,
@@ -271,11 +268,11 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         C: CompareArg<Item = T, Reclaimer = R, MarkBits = N>,
         S: StoreArg<Item = T, Reclaimer = R, MarkBits = N>,
     {
-        let current = current.into_marked_ptr();
+        let curr_ptr = current.as_marked_ptr();
         let new = ManuallyDrop::new(new);
         self.inner
-            .compare_exchange(current, new.as_marked_ptr(), success, failure)
-            .map(|_| unsafe { C::create_unlinked(current) })
+            .compare_exchange(curr_ptr, new.as_marked_ptr(), success, failure)
+            .map(|_| unsafe { current.into_unlinked() })
             .map_err(|inner| CompareExchangeError {
                 loaded: Unprotected { inner, _marker: PhantomData },
                 input: ManuallyDrop::into_inner(new),
@@ -287,7 +284,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn compare_exchange_weak<C, S>(
         &self,
-        current: impl CompareArg<Item = T, Reclaimer = R, MarkBits = N>,
+        current: C,
         new: S,
         success: Ordering,
         failure: Ordering,
@@ -296,11 +293,11 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         C: CompareArg<Item = T, Reclaimer = R, MarkBits = N>,
         S: StoreArg<Item = T, Reclaimer = R, MarkBits = N>,
     {
-        let current = current.into_marked_ptr();
+        let curr_ptr = current.as_marked_ptr();
         let new = ManuallyDrop::new(new);
         self.inner
-            .compare_exchange_weak(current, new.as_marked_ptr(), success, failure)
-            .map(|_| unsafe { C::create_unlinked(current) })
+            .compare_exchange_weak(curr_ptr, new.as_marked_ptr(), success, failure)
+            .map(|_| unsafe { current.into_unlinked() })
             .map_err(|inner| CompareExchangeError {
                 loaded: Unprotected { inner, _marker: PhantomData },
                 input: ManuallyDrop::into_inner(new),

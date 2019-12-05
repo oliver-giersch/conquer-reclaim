@@ -3,12 +3,17 @@
 use core::marker::PhantomData;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{MarkedOption, MarkedPtr};
+use conquer_pointer::{
+    MarkedPtr,
+    MaybeNull::{self, NotNull},
+};
 use typenum::Unsigned;
 
 use crate::retired::Retired;
-use crate::traits::{GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle};
-use crate::AcquireResult;
+use crate::traits::{
+    GenericReclaimer, GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
+};
+use crate::NotEqualError;
 
 /// TODO: docs...
 pub type Atomic<T, N> = crate::atomic::Atomic<T, Leaking, N>;
@@ -41,17 +46,22 @@ unsafe impl GlobalReclaimer for Leaking {
     unsafe fn retire(_: Retired<Self>) {}
 }
 
-/********** impl Reclaim **************************************************************************/
+/********** impl GenericReclaimer *****************************************************************/
 
-unsafe impl Reclaimer for Leaking {
-    type Global = ();
-    type Header = ();
+unsafe impl GenericReclaimer for Leaking {
     type Handle = Handle;
 
     #[inline]
     fn create_local_handle(&self) -> Self::Handle {
         Handle
     }
+}
+
+/********** impl Reclaimer ************************************************************************/
+
+unsafe impl Reclaimer for Leaking {
+    type Global = ();
+    type Header = ();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -98,8 +108,8 @@ unsafe impl Protect for Guard {
         &mut self,
         atomic: &Atomic<T, N>,
         order: Ordering,
-    ) -> MarkedOption<Shared<T, N>> {
-        MarkedOption::from(atomic.load_raw(order))
+    ) -> MaybeNull<Shared<T, N>> {
+        MaybeNull::from(atomic.load_raw(order))
             .map(|ptr| Shared { inner: ptr, _marker: PhantomData })
     }
 
@@ -109,10 +119,13 @@ unsafe impl Protect for Guard {
         atomic: &Atomic<T, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> AcquireResult<T, Self::Reclaimer, N> {
-        atomic.load_raw_if_equal(expected, order).map(|ptr| {
-            MarkedOption::from(ptr).map(|ptr| Shared { inner: ptr, _marker: PhantomData })
-        })
+    ) -> Result<MaybeNull<Shared<T, N>>, NotEqualError> {
+        match MaybeNull::from(atomic.load_raw(order)) {
+            MaybeNull::NotNull(ptr) if ptr.into_marked_ptr() == expected => {
+                Ok(NotNull(Shared { inner: ptr, _marker: PhantomData }))
+            }
+            _ => Err(NotEqualError(())),
+        }
     }
 }
 

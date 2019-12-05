@@ -1,12 +1,10 @@
 use core::marker::PhantomData;
-use core::ptr::NonNull;
 
 use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 use typenum::Unsigned;
 
-use crate::internal::Internal;
 use crate::retired::Retired;
-use crate::traits::{Reclaimer, ReclaimerHandle, SharedPointer};
+use crate::traits::{Reclaimer, ReclaimerHandle};
 use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/
@@ -19,7 +17,7 @@ impl<T, R: Reclaimer, N: Unsigned> Unlinked<T, R, N> {
 
     #[inline]
     pub unsafe fn from_marked_non_null(ptr: MarkedNonNull<T, N>) -> Self {
-        Self { inner, _marker: PhantomData }
+        Self { inner: ptr, _marker: PhantomData }
     }
 
     #[inline]
@@ -80,7 +78,3 @@ impl<T, R, N: Unsigned> MarkedNonNullable for Unlinked<T, R, N> {
 impl<T, R, N: Unsigned> NonNullable for Unlinked<T, R, N> {
     impl_non_nullable!();
 }
-
-/********** impl Internal *************************************************************************/
-
-impl<T, R, N: Unsigned> Internal for Unlinked<T, R, N> {}

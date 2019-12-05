@@ -4,27 +4,32 @@ macro_rules! impl_marked_non_nullable {
 
         #[inline]
         fn as_marked_ptr(ptr: &Self) -> conquer_pointer::MarkedPtr<Self::Item, Self::MarkBits> {
-            ptr.into_marked_ptr()
+            ptr.inner.into()
         }
 
         #[inline]
         fn into_marked_ptr(ptr: Self) -> conquer_pointer::MarkedPtr<Self::Item, Self::MarkBits> {
-            ptr.into_marked_ptr()
+            ptr.inner.into()
         }
 
         #[inline]
         fn clear_tag(ptr: Self) -> Self {
-            ptr.clear_tag()
+            Self::clear_tag(ptr)
         }
 
         #[inline]
         fn split_tag(ptr: Self) -> (Self, usize) {
-            ptr.split_tag()
+            Self::split_tag(ptr)
         }
 
         #[inline]
         fn set_tag(ptr: Self, tag: usize) -> Self {
-            ptr.set_tag(tag)
+            Self::set_tag(ptr, tag)
+        }
+
+        #[inline]
+        fn update_tag(ptr: Self, func: impl FnOnce(usize) -> usize) -> Self {
+            Self::update_tag(ptr, func)
         }
 
         #[inline]
@@ -109,7 +114,7 @@ macro_rules! impl_common {
 
         #[inline]
         pub fn update_tag(self, func: impl FnOnce(usize) -> usize) -> Self {
-            unimplemented!()
+            Self { inner: self.inner.update_tag(func), _marker: PhantomData }
         }
 
         #[inline]

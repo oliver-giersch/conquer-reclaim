@@ -1,11 +1,9 @@
 use core::fmt;
 use core::marker::PhantomData;
-use core::ptr::NonNull;
 
-use conquer_pointer::{MarkedNonNullable, MarkedPtr, NonNullable};
+use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 use typenum::Unsigned;
 
-use crate::internal::Internal;
 use crate::traits::Reclaimer;
 use crate::Shared;
 
@@ -24,7 +22,7 @@ impl<T, R, N> Copy for Shared<'_, T, R, N> {}
 
 /********** impl inherent *************************************************************************/
 
-impl<'g, T, R: Reclaimer, N: Unsigned> Shared<'g, T, R, N> {
+impl<'g, T, R: Reclaimer, N: Unsigned + 'static> Shared<'g, T, R, N> {
     impl_common_from!();
     impl_common!();
 
@@ -50,10 +48,8 @@ impl<'g, T, R: Reclaimer, N: Unsigned> Shared<'g, T, R, N> {
 impl<T: fmt::Debug, R, N: Unsigned> fmt::Debug for Shared<'_, T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Shared")
-            .field("ref", self.as_ref())
-            .field("tag", &self.inner.decompose_tag())
-            .finish()
+        let (ptr, tag) = self.inner.decompose();
+        f.debug_struct("Shared").field("ptr", &ptr).field("tag", &tag).finish()
     }
 }
 

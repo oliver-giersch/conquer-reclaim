@@ -13,7 +13,7 @@ pub trait StoreArg {
     type Reclaimer: Reclaimer;
     type MarkBits: Unsigned;
 
-    fn as_marked_ptr(&self) -> MarkedPtr<T, N>;
+    fn as_marked_ptr(&self) -> MarkedPtr<Self::Item, Self::MarkBits>;
 }
 
 /************ impl macros *************************************************************************/
@@ -43,7 +43,7 @@ macro_rules! impl_store_arg_for_option {
         fn as_marked_ptr(&self) -> MarkedPtr<Self::Item, Self::MarkBits> {
             match self {
                 Some(ref ptr) => ptr.as_marked_ptr(),
-                None = MarkedPtr::null(),
+                None => MarkedPtr::null(),
             }
         }
     };

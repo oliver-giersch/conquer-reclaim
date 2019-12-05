@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 use core::sync::atomic::Ordering;
 
 use conquer_pointer::{
-    MarkedNonNull, MarkedNonNullable, MarkedPtr,
+    MarkedNonNull, MarkedPtr,
     MaybeNull::{NotNull, Null},
 };
 use typenum::Unsigned;
@@ -32,8 +32,8 @@ impl<T, G: Protect, N: Unsigned> Guarded<T, G, N> {
         order: Ordering,
     ) -> Result<Self, G> {
         match guard.protect(src, order) {
-            Value(shared) => {
-                let protected = shared.into_marked_non_null();
+            NotNull(shared) => {
+                let protected = shared.inner;
                 Ok(Self { guard, protected })
             }
             Null(_) => Err(guard),
@@ -49,8 +49,8 @@ impl<T, G: Protect, N: Unsigned> Guarded<T, G, N> {
         order: Ordering,
     ) -> Result<Self, G> {
         match guard.protect_if_equal(src, expected, order) {
-            Ok(Value(shared)) => {
-                let protected = shared.into_marked_non_null();
+            Ok(NotNull(shared)) => {
+                let protected = shared.inner;
                 Ok(Self { guard, protected })
             }
             _ => Err(guard),
