@@ -85,7 +85,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     pub fn into_owned(self) -> Option<Owned<T, R, N>> {
         MaybeNull::from(self.inner.load(Ordering::Relaxed))
             .map(|ptr| Owned { inner: ptr, _marker: PhantomData })
-            .non_null()
+            .not_null()
     }
 
     /// TODO: Docs...
@@ -99,7 +99,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     pub fn take(&mut self) -> Option<Owned<T, R, N>> {
         MaybeNull::from(self.inner.swap(MarkedPtr::null(), Ordering::Relaxed))
             .map(|ptr| Owned { inner: ptr, _marker: PhantomData })
-            .non_null()
+            .not_null()
     }
 
     /// Loads a raw marked value from the pointer.

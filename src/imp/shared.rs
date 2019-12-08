@@ -28,12 +28,12 @@ impl<'g, T, R: Reclaimer, N: Unsigned + 'static> Shared<'g, T, R, N> {
 
     #[inline]
     pub unsafe fn decompose_ref(self) -> (&'g T, usize) {
-        self.inner.decompose_ref()
+        self.inner.decompose_ref_unbounded()
     }
 
     #[inline]
     pub unsafe fn deref(self) -> &'g T {
-        self.inner.as_ref()
+        self.inner.as_ref_unbounded()
     }
 
     #[inline]
@@ -64,7 +64,7 @@ impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
 
 /********** impl MarkedNonNullable ****************************************************************/
 
-impl<T, R, N: Unsigned> MarkedNonNullable for Shared<'_, T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> MarkedNonNullable for Shared<'_, T, R, N> {
     impl_marked_non_nullable!();
 }
 

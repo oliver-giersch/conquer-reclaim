@@ -54,15 +54,15 @@ macro_rules! impl_compare_arg_for_maybe_null {
 
 /********** Shared ********************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> CompareArg for Shared<'_, T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Shared<'_, T, R, N> {
     impl_compare_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> CompareArg for Option<Shared<'_, T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Option<Shared<'_, T, R, N>> {
     impl_compare_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> CompareArg for MaybeNull<Shared<'_, T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for MaybeNull<Shared<'_, T, R, N>> {
     impl_compare_arg_for_maybe_null!();
 }
 

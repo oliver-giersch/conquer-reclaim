@@ -130,8 +130,8 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     }
 
     #[inline]
-    pub fn set_tag(owned: Self, tag: usize) -> Self {
-        let inner = owned.inner.set_tag(tag);
+    pub fn clear_tag(owned: Self) -> Self {
+        let inner = owned.inner.clear_tag();
         mem::forget(owned);
 
         Self { inner, _marker: PhantomData }
@@ -146,8 +146,16 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     }
 
     #[inline]
-    pub fn clear_tag(owned: Self) -> Self {
-        let inner = owned.inner.clear_tag();
+    pub fn set_tag(owned: Self, tag: usize) -> Self {
+        let inner = owned.inner.set_tag(tag);
+        mem::forget(owned);
+
+        Self { inner, _marker: PhantomData }
+    }
+
+    #[inline]
+    pub fn update_tag(owned: Self, func: impl FnOnce(usize) -> usize) -> Self {
+        let inner = owned.inner.update_tag(func);
         mem::forget(owned);
 
         Self { inner, _marker: PhantomData }

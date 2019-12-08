@@ -79,15 +79,15 @@ impl<T, R: Reclaimer, N: Unsigned> StoreArg for MaybeNull<Owned<T, R, N>> {
 
 /********** Shared ********************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for Shared<'_, T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Shared<'_, T, R, N> {
     impl_store_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for Option<Shared<'_, T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Option<Shared<'_, T, R, N>> {
     impl_store_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for MaybeNull<Shared<'_, T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for MaybeNull<Shared<'_, T, R, N>> {
     impl_store_arg_for_maybe_null!();
 }
 
