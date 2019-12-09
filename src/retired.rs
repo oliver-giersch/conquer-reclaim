@@ -40,11 +40,13 @@ impl<R: Reclaimer + 'static> Retired<R> {
     ///   any non-static references, it must be ensured that these are **not**
     ///   accessed by the [`drop`][Drop::drop] function.
     #[inline]
-    pub unsafe fn new_unchecked<'a, T: 'a>(record: NonNull<T>) -> Self {
-        let any: NonNull<dyn Any + 'a> = Record::<T, R>::from_raw_non_null(record);
-        let any: NonNull<dyn Any + 'static> = mem::transmute(any);
+    pub fn new<'a, T: 'a>(record: NonNull<T>) -> Self {
+        unsafe {
+            let any: NonNull<dyn Any + 'a> = Record::<T, R>::from_raw_non_null(record);
+            let any: NonNull<dyn Any + 'static> = mem::transmute(any);
 
-        Self(any, PhantomData)
+            Self(any, PhantomData)
+        }
     }
 
     /// Converts a retired record to a raw pointer.

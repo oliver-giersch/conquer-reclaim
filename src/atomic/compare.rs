@@ -10,6 +10,8 @@ use crate::{Reclaimer, Shared, Unlinked, Unprotected};
 // CompareArg (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A trait for abstracting over various possible argument types for the compare
+/// part of a CAS.
 pub trait CompareArg: StoreArg {
     type Unlinked: Sized;
 

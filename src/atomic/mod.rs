@@ -7,7 +7,7 @@ use core::marker::PhantomData;
 use core::mem::{self, ManuallyDrop};
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{AtomicMarkedPtr, MarkedPtr, MaybeNull};
+use conquer_pointer::{AtomicMarkedPtr, MarkedNonNull, MarkedPtr, MaybeNull};
 
 use crate::traits::Reclaimer;
 use crate::typenum::Unsigned;
@@ -255,7 +255,6 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
             .map(|inner| Unlinked { inner, _marker: PhantomData })
     }
 
-    /// TODO: docs...
     #[inline]
     pub fn compare_exchange<C, S>(
         &self,
@@ -280,7 +279,6 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
             })
     }
 
-    /// TODO: docs...
     #[inline]
     pub fn compare_exchange_weak<C, S>(
         &self,
@@ -303,6 +301,18 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
                 input: ManuallyDrop::into_inner(new),
                 _private: (),
             })
+    }
+
+    #[inline]
+    pub(crate) fn load_raw_if_equal(
+        &self,
+        expected: MarkedPtr<T, N>,
+        order: Ordering,
+    ) -> Result<MaybeNull<MarkedNonNull<T, N>>, NotEqualError> {
+        match self.load_raw(order) {
+            ptr if ptr == expected => Ok(MaybeNull::from(ptr)),
+            _ => Err(NotEqualError(())),
+        }
     }
 }
 

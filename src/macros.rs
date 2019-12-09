@@ -93,7 +93,7 @@ macro_rules! impl_common {
     () => {
         #[inline]
         pub fn into_marked_ptr(self) -> MarkedPtr<T, N> {
-            self.inner.into_marked_ptr()
+            self.inner.into()
         }
 
         #[inline]

@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 
 use conquer_pointer::{
     MarkedPtr,
-    MaybeNull::{self, NotNull},
+    MaybeNull::{self, NotNull, Null},
 };
 
 use crate::atomic::Atomic;
@@ -15,7 +15,8 @@ use crate::{NotEqualError, Shared};
 // GuardRef (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A sealed trait for abstracting over different types for valid guard references.
+/// A sealed trait for abstracting over different types for valid guard
+/// references.
 ///
 /// For guard types implementing only the [`Protect`] trait, this trait is only
 /// implemented for *mutable* references to this type.
@@ -93,11 +94,9 @@ where
         expected: MarkedPtr<T, N>,
         order: Ordering,
     ) -> Result<MaybeNull<Shared<'g, T, Self::Reclaimer, N>>, NotEqualError> {
-        match MaybeNull::from(atomic.load_raw(order)) {
-            MaybeNull::NotNull(ptr) if ptr.into_marked_ptr() == expected => {
-                Ok(NotNull(Shared { inner: ptr, _marker: PhantomData }))
-            }
-            _ => Err(NotEqualError(())),
-        }
+        atomic.load_raw_if_equal(expected, order).map(|ptr| match ptr {
+            NotNull(inner) => NotNull(Shared { inner, _marker: PhantomData }),
+            Null(tag) => Null(tag),
+        })
     }
 }

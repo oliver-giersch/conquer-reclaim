@@ -37,7 +37,7 @@ impl<'g, T, R: Reclaimer, N: Unsigned + 'static> Shared<'g, T, R, N> {
     }
 
     #[inline]
-    pub fn cast<'a, U>(self) -> Shared<'a, U, R, N> {
+    pub unsafe fn cast<'a, U>(self) -> Shared<'a, U, R, N> {
         Shared { inner: self.inner.cast(), _marker: PhantomData }
     }
 }

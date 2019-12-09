@@ -8,6 +8,8 @@ use crate::{Owned, Shared, Unlinked, Unprotected};
 // StoreArg (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A trait for abstracting over various possible argument types for store or
+/// swap operations.
 pub trait StoreArg {
     type Item: Sized;
     type Reclaimer: Reclaimer;
@@ -32,7 +34,7 @@ macro_rules! impl_store_arg_for_type {
     };
 }
 
-/// Implements `StoreArg` for `Option<T>`.
+/// Implements `StoreArg` for `Option<_>`.
 macro_rules! impl_store_arg_for_option {
     () => {
         type Item = T;
@@ -49,7 +51,7 @@ macro_rules! impl_store_arg_for_option {
     };
 }
 
-/// Implements `StoreArg` for `MaybeNull<T>`.
+/// Implements `StoreArg` for `MaybeNull<_>`.
 macro_rules! impl_store_arg_for_maybe_null {
     () => {
         type Item = T;

@@ -34,6 +34,13 @@ impl<T, R: Reclaimer, N: Unsigned> Unprotected<T, R, N> {
     pub fn is_null(self) -> bool {
         self.inner.is_null()
     }
+
+    impl_common!();
+
+    #[inline]
+    pub fn cast<U>(self) -> Unprotected<U, R, N> {
+        Unprotected { inner: self.inner.cast(), _marker: PhantomData }
+    }
 }
 
 /********** impl Debug ****************************************************************************/

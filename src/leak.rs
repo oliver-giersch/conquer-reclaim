@@ -5,7 +5,7 @@ use core::sync::atomic::Ordering;
 
 use conquer_pointer::{
     MarkedPtr,
-    MaybeNull::{self, NotNull},
+    MaybeNull::{self, NotNull, Null},
 };
 
 use crate::retired::Retired;
@@ -15,22 +15,27 @@ use crate::traits::{
 use crate::typenum::Unsigned;
 use crate::NotEqualError;
 
-/// TODO: docs...
+/// A specialization of the [`Atomic`](crate::atomic::Atomic) type using
+/// [`Leaking`] as reclaimer.
 pub type Atomic<T, N> = crate::atomic::Atomic<T, Leaking, N>;
-/// TODO: docs...
+/// A specialization of the [`Owned`](crate::Owned) type using [`Leaking`] as
+/// reclaimer.
 pub type Owned<T, N> = crate::Owned<T, Leaking, N>;
-/// TODO: docs...
+/// A specialization of the [`Shared`](crate::Shared) type using [`Leaking`] as
+/// reclaimer.
 pub type Shared<'g, T, N> = crate::Shared<'g, T, Leaking, N>;
-/// TODO: docs...
+/// A specialization of the [`Unlinked`](crate::Unlinked) type using [`Leaking`]
+/// as reclaimer.
 pub type Unlinked<T, N> = crate::Unlinked<T, Leaking, N>;
-/// TODO: docs...
+/// A specialization of the [`Unprotected`](crate::Unprotected) type using
+/// [`Leaking`] as reclaimer.
 pub type Unprotected<T, N> = crate::Unprotected<T, Leaking, N>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Leaking
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// TODO: docs...
+/// A no-op [`GlobalReclaimer`] that deliberately leaks memory.
 #[derive(Copy, Clone, Debug, Default, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Leaking;
 
@@ -69,7 +74,7 @@ unsafe impl Reclaimer for Leaking {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// TODO: docs...
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Handle;
 
 /********** impl ReclaimHandle ********************************************************************/
@@ -120,12 +125,10 @@ unsafe impl Protect for Guard {
         expected: MarkedPtr<T, N>,
         order: Ordering,
     ) -> Result<MaybeNull<Shared<T, N>>, NotEqualError> {
-        match MaybeNull::from(atomic.load_raw(order)) {
-            MaybeNull::NotNull(ptr) if ptr.into_marked_ptr() == expected => {
-                Ok(NotNull(Shared { inner: ptr, _marker: PhantomData }))
-            }
-            _ => Err(NotEqualError(())),
-        }
+        atomic.load_raw_if_equal(expected, order).map(|ptr| match ptr {
+            NotNull(inner) => NotNull(Shared { inner, _marker: PhantomData }),
+            Null(tag) => Null(tag),
+        })
     }
 }
 

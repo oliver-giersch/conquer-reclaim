@@ -125,11 +125,6 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
     }
 
     #[inline]
-    pub fn tag(owned: &Self) -> usize {
-        owned.inner.decompose_tag()
-    }
-
-    #[inline]
     pub fn clear_tag(owned: Self) -> Self {
         let inner = owned.inner.clear_tag();
         mem::forget(owned);
@@ -159,6 +154,11 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
         mem::forget(owned);
 
         Self { inner, _marker: PhantomData }
+    }
+
+    #[inline]
+    pub fn decompose_tag(owned: &Self) -> usize {
+        owned.inner.decompose_tag()
     }
 
     /// Decomposes the internal marked pointer, returning a reference and the
