@@ -6,11 +6,13 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
-
+cfg_if::cfg_if! {
+    if #[cfg(feature = "std")] {
+        use std::boxed::Box;
+    } else {
+        use alloc::boxed::Box;
+    }
+}
 use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable, NullError};
 
 use crate::atomic::Atomic;

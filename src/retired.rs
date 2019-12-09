@@ -7,10 +7,13 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ptr::NonNull;
 
-#[cfg(not(feature = "std"))]
-use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use std::boxed::Box;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "std")] {
+        use std::boxed::Box;
+    } else {
+        use alloc::boxed::Box;
+    }
+}
 
 use crate::record::Record;
 use crate::traits::Reclaimer;
