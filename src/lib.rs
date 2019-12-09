@@ -1,7 +1,7 @@
 //! TODO: crate lvl docs...
 
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
-//#![warn(missing_docs)]
+#![warn(missing_docs)]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -13,7 +13,7 @@ pub mod prelude {
 }
 
 #[macro_use]
-mod internal;
+mod macros;
 
 pub mod leak;
 
@@ -30,7 +30,6 @@ pub use conquer_pointer;
 pub use conquer_pointer::typenum;
 
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
-use typenum::Unsigned;
 
 pub use crate::atomic::{Atomic, CompareExchangeError};
 pub use crate::guarded::Guarded;
@@ -39,6 +38,8 @@ pub use crate::retired::Retired;
 pub use crate::traits::{
     GenericReclaimer, GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
 };
+
+use crate::typenum::Unsigned;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Owned (impl in imp/owned.rs)
@@ -122,7 +123,10 @@ pub struct Unprotected<T, R, N> {
 #[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct NotEqualError(());
 
+/********** public functions **********************************************************************/
+
+/// TODO: Docs...
 #[inline(always)]
-pub fn null<T, R: Reclaimer, N: Unsigned>() -> Unprotected<T, N, R> {
+pub fn null<T, R: Reclaimer, N: Unsigned>() -> Unprotected<T, R, N> {
     Unprotected::null()
 }

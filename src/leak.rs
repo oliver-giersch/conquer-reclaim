@@ -7,12 +7,12 @@ use conquer_pointer::{
     MarkedPtr,
     MaybeNull::{self, NotNull},
 };
-use typenum::Unsigned;
 
 use crate::retired::Retired;
 use crate::traits::{
     GenericReclaimer, GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
 };
+use crate::typenum::Unsigned;
 use crate::NotEqualError;
 
 /// TODO: docs...

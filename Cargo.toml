@@ -19,5 +19,4 @@ std = []
 
 [dependencies]
 conquer-pointer = { git = "https://github.com/oliver-giersch/conquer-pointer" }
-memoffset = "0.5.1"
-typenum = "1.10.0"
+memoffset = "0.5.3"

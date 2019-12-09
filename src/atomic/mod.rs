@@ -8,9 +8,9 @@ use core::mem::{self, ManuallyDrop};
 use core::sync::atomic::Ordering;
 
 use conquer_pointer::{AtomicMarkedPtr, MarkedPtr, MaybeNull};
-use typenum::Unsigned;
 
 use crate::traits::Reclaimer;
+use crate::typenum::Unsigned;
 use crate::{NotEqualError, Owned, Shared, Unlinked, Unprotected};
 
 use self::{compare::CompareArg, guard::GuardRef, store::StoreArg};
@@ -102,7 +102,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
             .not_null()
     }
 
-    /// Loads a raw marked value from the pointer.
+    /// Loads a raw [`MarkedPtr`] from the [`Atomic`].
     ///
     /// `load_raw` takes an [`Ordering`] argument, which describes the
     /// memory ordering of this operation.
@@ -140,7 +140,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         self.inner.load(order)
     }
 
-    /// Loads an optional [`Unprotected`] reference from the `Atomic`.
+    /// Loads an [`Unprotected`] pointer from the [`Atomic`].
     ///
     /// The returned reference is explicitly **not** protected from reclamation,
     /// meaning another thread could free the value's memory at any time.

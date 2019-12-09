@@ -1,10 +1,10 @@
 use core::marker::PhantomData;
 
 use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
-use typenum::Unsigned;
 
 use crate::retired::Retired;
 use crate::traits::{Reclaimer, ReclaimerHandle};
+use crate::typenum::Unsigned;
 use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/

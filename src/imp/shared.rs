@@ -2,9 +2,9 @@ use core::fmt;
 use core::marker::PhantomData;
 
 use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
-use typenum::Unsigned;
 
 use crate::traits::Reclaimer;
+use crate::typenum::Unsigned;
 use crate::Shared;
 
 /********** impl Clone ****************************************************************************/
@@ -27,19 +27,18 @@ impl<'g, T, R: Reclaimer, N: Unsigned + 'static> Shared<'g, T, R, N> {
     impl_common!();
 
     #[inline]
-    pub unsafe fn decompose_ref(self) -> (&'g T, usize) {
-        self.inner.decompose_ref_unbounded()
-    }
-
-    #[inline]
     pub unsafe fn deref(self) -> &'g T {
         self.inner.as_ref_unbounded()
     }
 
     #[inline]
-    pub unsafe fn cast<'a, U>(self) -> Shared<'a, U, R, N> {
-        // TODO: check alignment of U
-        unimplemented!()
+    pub unsafe fn decompose_ref(self) -> (&'g T, usize) {
+        self.inner.decompose_ref_unbounded()
+    }
+
+    #[inline]
+    pub fn cast<'a, U>(self) -> Shared<'a, U, R, N> {
+        Shared { inner: self.inner.cast(), _marker: PhantomData }
     }
 }
 

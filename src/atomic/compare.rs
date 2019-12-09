@@ -1,9 +1,9 @@
 use core::marker::PhantomData;
 
 use conquer_pointer::MaybeNull;
-use typenum::Unsigned;
 
 use crate::atomic::store::StoreArg;
+use crate::typenum::Unsigned;
 use crate::{Reclaimer, Shared, Unlinked, Unprotected};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

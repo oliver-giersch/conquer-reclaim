@@ -5,10 +5,10 @@ use conquer_pointer::{
     MarkedNonNull, MarkedPtr,
     MaybeNull::{NotNull, Null},
 };
-use typenum::Unsigned;
 
 use crate::atomic::Atomic;
 use crate::traits::Protect;
+use crate::typenum::Unsigned;
 use crate::Shared;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -12,11 +12,11 @@ use alloc::boxed::Box;
 use std::boxed::Box;
 
 use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable, NullError};
-use typenum::Unsigned;
 
 use crate::atomic::Atomic;
 use crate::record::Record;
 use crate::traits::Reclaimer;
+use crate::typenum::Unsigned;
 use crate::{Owned, Shared};
 
 /********** impl Clone ****************************************************************************/

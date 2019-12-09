@@ -1,7 +1,7 @@
 use conquer_pointer::{MarkedPtr, MaybeNull};
-use typenum::Unsigned;
 
 use crate::traits::Reclaimer;
+use crate::typenum::Unsigned;
 use crate::{Owned, Shared, Unlinked, Unprotected};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -5,10 +5,10 @@ use conquer_pointer::{
     MarkedPtr,
     MaybeNull::{self, NotNull},
 };
-use typenum::Unsigned;
 
 use crate::atomic::Atomic;
 use crate::traits::{Protect, ProtectRegion, Reclaimer};
+use crate::typenum::Unsigned;
 use crate::{NotEqualError, Shared};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -17,11 +17,10 @@ use crate::{NotEqualError, Shared};
 
 /// A sealed trait for abstracting over different types for valid guard references.
 ///
-/// For guard types implementing only the [`Protect`](crate::Protect) trait,
-/// this trait is only implemented for *mutable* references to this type.
-/// For guard types that also implement the
-/// [`ProtectRegion`](crate::ProtectRegion) trait, this trait is also
-/// implemented for *shared* references.
+/// For guard types implementing only the [`Protect`] trait, this trait is only
+/// implemented for *mutable* references to this type.
+/// For guard types that also implement the [`ProtectRegion`] trait, this trait
+/// is also implemented for *shared* references.
 pub trait GuardRef<'g> {
     /// TODO: Docs...
     type Reclaimer: Reclaimer;

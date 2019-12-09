@@ -2,9 +2,9 @@ use core::fmt;
 use core::marker::PhantomData;
 
 use conquer_pointer::MarkedPtr;
-use typenum::Unsigned;
 
 use crate::traits::Reclaimer;
+use crate::typenum::Unsigned;
 use crate::Unprotected;
 
 /********** impl Clone ****************************************************************************/
