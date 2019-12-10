@@ -11,7 +11,11 @@ use crate::{NotEqualError, Shared};
 // GlobalReclaimer (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait GlobalReclaimer: GenericReclaimer {
+pub unsafe trait GlobalReclaimer
+where
+    Self: GenericReclaimer,
+    <Self as GenericReclaimer>::Handle: Default,
+{
     fn guard() -> <Self::Handle as ReclaimerHandle>::Guard;
     unsafe fn retire(record: Retired<Self>);
 }
@@ -42,11 +46,9 @@ pub unsafe trait Reclaimer: Default + Sync + Sized + 'static {
 
 pub unsafe trait ReclaimerHandle: Clone + Sized {
     type Reclaimer: Reclaimer;
-
     type Guard: Protect<Reclaimer = Self::Reclaimer>;
 
     fn guard(self) -> Self::Guard;
-
     unsafe fn retire(self, record: Retired<Self::Reclaimer>);
 }
 

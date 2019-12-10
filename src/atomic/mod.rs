@@ -80,6 +80,11 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         Self { inner: AtomicMarkedPtr::new(ptr), _marker: PhantomData }
     }
 
+    #[inline]
+    pub unsafe fn from_unprotected(unprotected: Unprotected<T, R, N>) -> Self {
+        Self { inner: AtomicMarkedPtr::new(unprotected.into_marked_ptr()), _marker: PhantomData }
+    }
+
     /// TODO: Docs...
     #[inline]
     pub fn into_owned(self) -> Option<Owned<T, R, N>> {

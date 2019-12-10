@@ -19,7 +19,7 @@ use crate::atomic::Atomic;
 use crate::record::Record;
 use crate::traits::Reclaimer;
 use crate::typenum::Unsigned;
-use crate::{Owned, Shared};
+use crate::{Owned, Shared, Unprotected};
 
 /********** impl Clone ****************************************************************************/
 
@@ -209,6 +209,14 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
         let (ptr, tag) = owned.inner.decompose();
         mem::forget(owned);
         unsafe { (&mut *ptr.as_ptr(), tag) }
+    }
+
+    #[inline]
+    pub fn leak_unprotected(owned: Self) -> Unprotected<T, R, N> {
+        let inner = owned.inner.into_marked_ptr();
+        mem::forget(owned);
+
+        Unprotected { inner, _marker: PhantomData }
     }
 
     /// Leaks the `owned` value and turns it into a "protected" [`Shared`][shared]
