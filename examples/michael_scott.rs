@@ -11,6 +11,8 @@ type Acq = Ordering::Acquire;
 type Rel = Ordering::Release;
 type Rlx = Ordering::Relaxed;
 
+const REL_RLX: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Queue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -50,20 +52,19 @@ impl<T, R: GenericReclaimer> Queue<T, R> {
 
         let mut guard = handle.guard();
         loop {
-            let tail = self.tail.load(&mut guard, Ordering::Acquire).unwrap();
+            let tail = self.tail.load(&mut guard, Ordering::Acquire).unwrap_unchecked();
             let next = tail.deref().next.load_unprotected(Ordering::Relaxed);
 
             if next.is_null() {
-                match tail.deref().next.compare_exchange(next, node, Rel, Rlx) {
+                match tail.deref().next.compare_exchange(next, node, REL_RLX) {
                     Err(fail) => node = fail.input,
                     Ok(_) => {
-                        let _ = self.tail.compare_exchange(tail, node, Rel, Rlx);
+                        let _ = self.tail.compare_exchange(tail, node, REL_RLX);
                         return;
                     }
                 }
             } else {
-                let _ =
-                    self.tail.compare_exchange(tail, next, Ordering::Release, Ordering::Relaxed);
+                let _ = self.tail.compare_exchange(tail, next, REL_RLX);
             }
         }
     }
@@ -73,15 +74,16 @@ impl<T, R: GenericReclaimer> Queue<T, R> {
         let mut head_guard = handle.clone().guard();
         let mut next_guard = handle.clone().guard();
 
-        let mut head = self.head.load(&mut head_guard, Acq).unwrap();
-        while let NotNull(next) = head.deref().next.load(&mut next_guard, Rlx) {
-            if let Ok(unlinked) = self.head.compare_exchange(head, next, Rel, Rlx) {
+        let mut head = self.head.load(&mut head_guard, Acq).unwrap_unchecked();
+        while let NotNull(next) = head.deref().next.load(&mut next_guard, Ordering::Relaxed) {
+            if let Ok(unlinked) = self.head.compare_exchange(head, next, REL_RLX) {
                 let res = ptr::read(&*next.deref().elem);
                 handle.retire(unlinked.into_retired());
+
                 return res;
             }
 
-            head = self.head.load(&mut head_guard, Acq).unwrap();
+            head = self.head.load(&mut head_guard, Acq).unwrap_unchecked();
         }
 
         None
@@ -91,12 +93,12 @@ impl<T, R: GenericReclaimer> Queue<T, R> {
 impl<T, R: GlobalReclaimer> Queue<T, R> {
     #[inline]
     pub fn push(&self, elem: T) {
-        unsafe { self.push_inner(elem, R::Handle::default()) }
+        unsafe { self.push_inner(elem, R::create_handle()) }
     }
 
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.pop_inner(R::Handle::default()) }
+        unsafe { self.pop_inner(R::create_handle()) }
     }
 }
 

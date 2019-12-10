@@ -265,8 +265,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         &self,
         current: C,
         new: S,
-        success: Ordering,
-        failure: Ordering,
+        (success, failure): (Ordering, Ordering),
     ) -> Result<C::Unlinked, CompareExchangeError<S, T, R, N>>
     where
         C: CompareArg<Item = T, Reclaimer = R, MarkBits = N>,
@@ -289,8 +288,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
         &self,
         current: C,
         new: S,
-        success: Ordering,
-        failure: Ordering,
+        (success, failure): (Ordering, Ordering),
     ) -> Result<C::Unlinked, CompareExchangeError<S, T, R, N>>
     where
         C: CompareArg<Item = T, Reclaimer = R, MarkBits = N>,
