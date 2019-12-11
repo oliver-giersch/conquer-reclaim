@@ -12,8 +12,7 @@ use crate::{NotEqualError, Shared};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub unsafe trait GlobalReclaimer: GenericReclaimer {
-    fn create_handle() -> Self::Handle;
-
+    fn handle() -> Self::Handle;
     fn guard() -> <Self::Handle as ReclaimerHandle>::Guard;
     unsafe fn retire(record: Retired<Self>);
 }
@@ -25,7 +24,7 @@ pub unsafe trait GlobalReclaimer: GenericReclaimer {
 pub unsafe trait GenericReclaimer: Reclaimer {
     type Handle: ReclaimerHandle<Reclaimer = Self>;
 
-    fn create_local_handle(&self) -> Self::Handle;
+    fn local_handle(&self) -> Self::Handle;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

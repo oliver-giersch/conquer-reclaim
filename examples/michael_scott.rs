@@ -40,7 +40,7 @@ impl<T, R: GenericReclaimer> Queue<T, R> {
 
     #[inline]
     pub fn handle(&self) -> Handle<T, R> {
-        Handle { handle: self.reclaimer.create_local_handle(), queue: self }
+        Handle { handle: self.reclaimer.local_handle(), queue: self }
     }
 
     #[inline]
@@ -93,12 +93,12 @@ impl<T, R: GenericReclaimer> Queue<T, R> {
 impl<T, R: GlobalReclaimer> Queue<T, R> {
     #[inline]
     pub fn push(&self, elem: T) {
-        unsafe { self.push_inner(elem, R::create_handle()) }
+        unsafe { self.push_inner(elem, R::handle()) }
     }
 
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.pop_inner(R::create_handle()) }
+        unsafe { self.pop_inner(R::handle()) }
     }
 }
 

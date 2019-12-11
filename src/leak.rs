@@ -43,6 +43,11 @@ pub struct Leaking;
 
 unsafe impl GlobalReclaimer for Leaking {
     #[inline]
+    fn handle() -> Self::Handle {
+        Handle
+    }
+
+    #[inline]
     fn guard() -> <Self::Handle as ReclaimerHandle>::Guard {
         Guard
     }
@@ -57,7 +62,7 @@ unsafe impl GenericReclaimer for Leaking {
     type Handle = Handle;
 
     #[inline]
-    fn create_local_handle(&self) -> Self::Handle {
+    fn local_handle(&self) -> Self::Handle {
         Handle
     }
 }
@@ -67,6 +72,10 @@ unsafe impl GenericReclaimer for Leaking {
 unsafe impl Reclaimer for Leaking {
     type Global = ();
     type Header = ();
+
+    fn new() -> Self {
+        Leaking
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

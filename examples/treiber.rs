@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::ptr;
 use std::sync::atomic::Ordering;
@@ -8,13 +7,12 @@ use conquer_reclaim::typenum::U0;
 use conquer_reclaim::{GenericReclaimer, GlobalReclaimer, Owned, ReclaimerHandle};
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
-const REL_RLX: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Stack
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Stack<T, R> {
+pub struct Stack<T, R: GenericReclaimer> {
     head: Atomic<Node<T, R>, R>,
     reclaimer: R,
 }
@@ -22,6 +20,10 @@ pub struct Stack<T, R> {
 /********** impl inherent *************************************************************************/
 
 impl<T, R: GenericReclaimer> Stack<T, R> {
+    const RELEASE_CAS: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
+    const RELAXED_CAS: (Ordering, Ordering) = (Ordering::Relaxed, Ordering::Relaxed);
+
+    /// Creates a new empty [`Stack`].
     #[inline]
     pub fn new() -> Self {
         Self { head: Atomic::null(), reclaimer: R::new() }
@@ -29,17 +31,17 @@ impl<T, R: GenericReclaimer> Stack<T, R> {
 
     #[inline]
     pub fn handle(&self) -> StackHandle<T, R> {
-        StackHandle { stack: self, handle: self.reclaimer.create_local_handle() }
+        StackHandle { stack: self, handle: self.reclaimer.local_handle() }
     }
 
     #[inline]
     pub fn push(&self, elem: T) {
         let mut node = Owned::new(Node::new(elem));
-
         loop {
             let head = self.head.load_unprotected(Ordering::Relaxed);
             node.next.store(head, Ordering::Relaxed);
-            match self.head.compare_exchange_weak(head, node, REL_RLX) {
+            // (stack:1) this release CAS syncs-with the acquire load (stack:2)
+            match self.head.compare_exchange_weak(head, node, Self::RELEASE_CAS) {
                 Ok(_) => return,
                 Err(fail) => node = fail.input,
             }
@@ -47,14 +49,14 @@ impl<T, R: GenericReclaimer> Stack<T, R> {
     }
 
     #[inline]
-    pub unsafe fn pop_unchecked(&self, handle: R::Handle) -> Option<T> {
+    pub unsafe fn pop_unchecked(&self, handle: &R::Handle) -> Option<T> {
         let mut guard = handle.clone().guard();
-
+        // (stack:2) this acquire load syncs-with the release CAS (stack:1)
         while let NotNull(head) = self.head.load(&mut guard, Ordering::Acquire) {
             let next = head.deref().next.load_unprotected(Ordering::Relaxed);
-            if let Ok(unlinked) = self.head.compare_exchange_weak(head, next, REL_RLX) {
+            if let Ok(unlinked) = self.head.compare_exchange_weak(head, next, Self::RELAXED_CAS) {
                 let res = ptr::read(&*unlinked.deref().inner);
-                handle.retire(unlinked.into_retired());
+                handle.clone().retire(unlinked.into_retired());
 
                 return Some(res);
             }
@@ -67,7 +69,29 @@ impl<T, R: GenericReclaimer> Stack<T, R> {
 impl<T, R: GlobalReclaimer> Stack<T, R> {
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.pop_unchecked(R::create_handle()) }
+        unsafe { self.pop_unchecked(&R::handle()) }
+    }
+}
+
+/********** impl Default **************************************************************************/
+
+impl<T, R: GenericReclaimer> Default for Stack<T, R> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/********** impl Drop *****************************************************************************/
+
+impl<T, R: GenericReclaimer> Drop for Stack<T, R> {
+    #[inline]
+    fn drop(&mut self) {
+        let mut curr = self.head.take();
+        while let Some(mut node) = curr {
+            unsafe { ManuallyDrop::drop(&mut node.inner) };
+            curr = node.next.take();
+        }
     }
 }
 
@@ -90,7 +114,7 @@ impl<T, R: GenericReclaimer> StackHandle<'_, T, R> {
 
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.stack.pop_unchecked(self.handle.clone()) }
+        unsafe { self.stack.pop_unchecked(&self.handle) }
     }
 }
 
