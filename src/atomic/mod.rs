@@ -330,7 +330,7 @@ impl<T, R: Reclaimer, N: Unsigned> Default for Atomic<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
+impl<T, R, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (ptr, tag) = self.inner.load(Ordering::SeqCst).decompose();
