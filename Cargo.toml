@@ -19,5 +19,12 @@ std = []
 
 [dependencies]
 cfg-if = "0.1.10"
-conquer-pointer = { git = "https://github.com/oliver-giersch/conquer-pointer" }
 memoffset = "0.5.3"
+
+[dependencies.conquer-pointer]
+git = "https://github.com/oliver-giersch/conquer-pointer"
+default-features = false
+
+[dev-dependencies.conquer-util]
+git = "https://github.com/oliver-giersch/conquer-util"
+features = ["align"]

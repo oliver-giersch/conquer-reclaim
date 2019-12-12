@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering;
 
 use conquer_reclaim::conquer_pointer::MaybeNull::NotNull;
 use conquer_reclaim::{GlobalReclaimer, Owned, OwningReclaimer, ReclaimerHandle};
+use conquer_util::align::Aligned128 as CacheAligned;
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, conquer_reclaim::typenum::U0>;
 
@@ -11,10 +12,9 @@ type Atomic<T, R> = conquer_reclaim::Atomic<T, R, conquer_reclaim::typenum::U0>;
 // Queue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// FIXME: pad head & tail to 128 byte
 pub struct Queue<T, R: OwningReclaimer> {
-    head: Atomic<Node<T, R>, R>,
-    tail: Atomic<Node<T, R>, R>,
+    head: CacheAligned<Atomic<Node<T, R>, R>>,
+    tail: CacheAligned<Atomic<Node<T, R>, R>>,
     reclaimer: R,
 }
 
@@ -29,8 +29,8 @@ impl<T, R: OwningReclaimer> Queue<T, R> {
     pub fn new() -> Self {
         let sentinel = Owned::leak_unprotected(Owned::new(Node::sentinel()));
         Self {
-            head: unsafe { Atomic::from_unprotected(sentinel) },
-            tail: unsafe { Atomic::from_unprotected(sentinel) },
+            head: unsafe { CacheAligned::new(Atomic::from_unprotected(sentinel)) },
+            tail: unsafe { CacheAligned::new(Atomic::from_unprotected(sentinel)) },
             reclaimer: R::new(),
         }
     }
@@ -38,7 +38,7 @@ impl<T, R: OwningReclaimer> Queue<T, R> {
     /// Returns `true` if the [`Queue`] is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.head.load_raw(Ordering::Relaxed) == self.tail.load_raw(Ordering::Relaxed)
+        self.head().load_raw(Ordering::Relaxed) == self.tail().load_raw(Ordering::Relaxed)
     }
 
     /// Derives a [`ReclaimerHandle`] from the [`Queue`]'s internal [`Reclaimer`].
@@ -64,19 +64,19 @@ impl<T, R: OwningReclaimer> Queue<T, R> {
         let mut node = Owned::leak_unprotected(Owned::new(Node::new(elem)));
         let mut guard = handle.clone().guard();
         loop {
-            let tail = self.tail.load(&mut guard, Ordering::Acquire).unwrap_unchecked();
+            let tail = self.tail().load(&mut guard, Ordering::Acquire).unwrap_unchecked();
             let next = tail.deref().next.load_unprotected(Ordering::Relaxed);
 
             if next.is_null() {
                 match tail.deref().next.compare_exchange(next, node, Self::RELEASE_CAS) {
                     Err(fail) => node = fail.input,
                     Ok(_) => {
-                        let _ = self.tail.compare_exchange(tail, node, Self::RELAXED_CAS);
+                        let _ = self.tail().compare_exchange(tail, node, Self::RELAXED_CAS);
                         return;
                     }
                 }
             } else {
-                let _ = self.tail.compare_exchange(tail, next, Self::RELEASE_CAS);
+                let _ = self.tail().compare_exchange(tail, next, Self::RELEASE_CAS);
             }
         }
     }
@@ -93,19 +93,29 @@ impl<T, R: OwningReclaimer> Queue<T, R> {
         let mut head_guard = handle.clone().guard();
         let mut next_guard = handle.clone().guard();
 
-        let mut head = self.head.load(&mut head_guard, Ordering::Acquire).unwrap_unchecked();
+        let mut head = self.head().load(&mut head_guard, Ordering::Acquire).unwrap_unchecked();
         while let NotNull(next) = head.deref().next.load(&mut next_guard, Ordering::Relaxed) {
-            if let Ok(unlinked) = self.head.compare_exchange(head, next, Self::RELAXED_CAS) {
+            if let Ok(unlinked) = self.head().compare_exchange(head, next, Self::RELAXED_CAS) {
                 let res = ptr::read(&*next.deref().elem);
                 handle.clone().retire(unlinked.into_retired());
 
                 return res;
             }
 
-            head = self.head.load(&mut head_guard, Ordering::Acquire).unwrap_unchecked();
+            head = self.head().load(&mut head_guard, Ordering::Acquire).unwrap_unchecked();
         }
 
         None
+    }
+
+    #[inline]
+    fn head(&self) -> &Atomic<Node<T, R>, R> {
+        self.head.get()
+    }
+
+    #[inline]
+    fn tail(&self) -> &Atomic<Node<T, R>, R> {
+        self.tail.get()
     }
 }
 
@@ -138,7 +148,7 @@ impl<T, R: OwningReclaimer> Drop for Queue<T, R> {
     #[inline]
     fn drop(&mut self) {
         // this is safe as long as only head the pointer is taken
-        let mut curr = self.head.take();
+        let mut curr = self.head.aligned.take();
         while let Some(mut node) = curr {
             unsafe { ManuallyDrop::drop(&mut node.elem) };
             curr = node.next.take();
