@@ -36,7 +36,7 @@ pub use crate::guarded::Guarded;
 pub use crate::record::Record;
 pub use crate::retired::Retired;
 pub use crate::traits::{
-    GenericReclaimer, GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
+    GlobalReclaimer, OwningReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
 };
 
 use crate::typenum::Unsigned;

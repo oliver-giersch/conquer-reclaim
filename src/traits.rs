@@ -11,7 +11,7 @@ use crate::{NotEqualError, Shared};
 // GlobalReclaimer (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait GlobalReclaimer: GenericReclaimer {
+pub unsafe trait GlobalReclaimer: OwningReclaimer {
     fn handle() -> Self::Handle;
     fn guard() -> <Self::Handle as ReclaimerHandle>::Guard;
     unsafe fn retire(record: Retired<Self>);
@@ -21,10 +21,11 @@ pub unsafe trait GlobalReclaimer: GenericReclaimer {
 // GenericReclaimer (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait GenericReclaimer: Reclaimer {
-    type Handle: ReclaimerHandle<Reclaimer = Self>;
+pub unsafe trait OwningReclaimer: Reclaimer {
+    type Handle: ReclaimerHandle<Reclaimer = Self> + 'static;
 
-    fn local_handle(&self) -> Self::Handle;
+    // TODO: fn owning_local_handle(&self) -> Self::Handle<'_, '_>;
+    fn owning_local_handle(&self) -> Self::Handle;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -37,8 +38,8 @@ pub unsafe trait Reclaimer: Default + Sync + Sized + 'static {
     type Header: Default + Sync + Sized + 'static;
 
     fn new() -> Self;
-    // fn owning_local_handle<'global>(&'global self) -> Self::Handle<'_, 'global>;
-    // unsafe fn raw_local_handle(&self) -> Self::Handle<'_, '_>;
+    // TODO: fn ref_local_handle<'global>(&'global self) -> Self::Handle<'_, 'global>;
+    // TODO: unsafe fn raw_local_handle(&self) -> Self::Handle<'_, '_>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

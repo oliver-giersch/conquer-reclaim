@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use conquer_reclaim::conquer_pointer::MaybeNull::NotNull;
 use conquer_reclaim::typenum::U0;
-use conquer_reclaim::{GenericReclaimer, GlobalReclaimer, Owned, ReclaimerHandle};
+use conquer_reclaim::{GlobalReclaimer, Owned, OwningReclaimer, ReclaimerHandle};
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
 
@@ -12,14 +12,14 @@ type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
 // Stack
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Stack<T, R: GenericReclaimer> {
+pub struct Stack<T, R: OwningReclaimer> {
     head: Atomic<Node<T, R>, R>,
     reclaimer: R,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: GenericReclaimer> Stack<T, R> {
+impl<T, R: OwningReclaimer> Stack<T, R> {
     const RELEASE_CAS: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
     const RELAXED_CAS: (Ordering, Ordering) = (Ordering::Relaxed, Ordering::Relaxed);
 
@@ -31,7 +31,7 @@ impl<T, R: GenericReclaimer> Stack<T, R> {
 
     #[inline]
     pub fn handle(&self) -> StackHandle<T, R> {
-        StackHandle { stack: self, handle: self.reclaimer.local_handle() }
+        StackHandle { stack: self, handle: self.reclaimer.owning_local_handle() }
     }
 
     #[inline]
@@ -75,7 +75,7 @@ impl<T, R: GlobalReclaimer> Stack<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: GenericReclaimer> Default for Stack<T, R> {
+impl<T, R: OwningReclaimer> Default for Stack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -84,7 +84,7 @@ impl<T, R: GenericReclaimer> Default for Stack<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: GenericReclaimer> Drop for Stack<T, R> {
+impl<T, R: OwningReclaimer> Drop for Stack<T, R> {
     #[inline]
     fn drop(&mut self) {
         let mut curr = self.head.take();
@@ -99,14 +99,14 @@ impl<T, R: GenericReclaimer> Drop for Stack<T, R> {
 // StackHandle
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct StackHandle<'s, T, R: GenericReclaimer> {
+pub struct StackHandle<'s, T, R: OwningReclaimer> {
     stack: &'s Stack<T, R>,
     handle: R::Handle,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: GenericReclaimer> StackHandle<'_, T, R> {
+impl<T, R: OwningReclaimer> StackHandle<'_, T, R> {
     #[inline]
     pub fn push(&self, elem: T) {
         self.stack.push(elem);
@@ -129,7 +129,7 @@ struct Node<T, R> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: GenericReclaimer> Node<T, R> {
+impl<T, R: OwningReclaimer> Node<T, R> {
     #[inline]
     fn new(elem: T) -> Self {
         Self { inner: ManuallyDrop::new(elem), next: Atomic::null() }

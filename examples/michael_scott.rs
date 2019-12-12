@@ -3,7 +3,7 @@ use std::ptr;
 use std::sync::atomic::Ordering;
 
 use conquer_reclaim::conquer_pointer::MaybeNull::NotNull;
-use conquer_reclaim::{GenericReclaimer, GlobalReclaimer, Owned, ReclaimerHandle};
+use conquer_reclaim::{GlobalReclaimer, Owned, OwningReclaimer, ReclaimerHandle};
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, conquer_reclaim::typenum::U0>;
 
@@ -12,7 +12,7 @@ type Atomic<T, R> = conquer_reclaim::Atomic<T, R, conquer_reclaim::typenum::U0>;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // FIXME: pad head & tail to 128 byte
-pub struct Queue<T, R: GenericReclaimer> {
+pub struct Queue<T, R: OwningReclaimer> {
     head: Atomic<Node<T, R>, R>,
     tail: Atomic<Node<T, R>, R>,
     reclaimer: R,
@@ -20,7 +20,7 @@ pub struct Queue<T, R: GenericReclaimer> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: GenericReclaimer> Queue<T, R> {
+impl<T, R: OwningReclaimer> Queue<T, R> {
     const RELEASE_CAS: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
     const RELAXED_CAS: (Ordering, Ordering) = (Ordering::Relaxed, Ordering::Relaxed);
 
@@ -44,7 +44,7 @@ impl<T, R: GenericReclaimer> Queue<T, R> {
     /// Derives a [`ReclaimerHandle`] from the [`Queue`]'s internal [`Reclaimer`].
     #[inline]
     pub fn reclaimer_handle(&self) -> R::Handle {
-        self.reclaimer.local_handle()
+        self.reclaimer.owning_local_handle()
     }
 
     /// Creates a new (thread-local) [`Handle`] for accessing the queue safely.
@@ -125,7 +125,7 @@ impl<T, R: GlobalReclaimer> Queue<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: GenericReclaimer> Default for Queue<T, R> {
+impl<T, R: OwningReclaimer> Default for Queue<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -134,7 +134,7 @@ impl<T, R: GenericReclaimer> Default for Queue<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: GenericReclaimer> Drop for Queue<T, R> {
+impl<T, R: OwningReclaimer> Drop for Queue<T, R> {
     #[inline]
     fn drop(&mut self) {
         // this is safe as long as only head the pointer is taken
@@ -150,14 +150,14 @@ impl<T, R: GenericReclaimer> Drop for Queue<T, R> {
 // Handle
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Handle<'q, T, R: GenericReclaimer> {
+pub struct Handle<'q, T, R: OwningReclaimer> {
     handle: R::Handle,
     queue: &'q Queue<T, R>,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: GenericReclaimer> Handle<'_, T, R> {
+impl<T, R: OwningReclaimer> Handle<'_, T, R> {
     #[inline]
     pub fn push(&self, elem: T) {
         unsafe { self.queue.push_unchecked(elem, &self.handle) };

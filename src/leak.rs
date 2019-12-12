@@ -10,7 +10,7 @@ use conquer_pointer::{
 
 use crate::retired::Retired;
 use crate::traits::{
-    GenericReclaimer, GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
+    GlobalReclaimer, OwningReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
 };
 use crate::typenum::Unsigned;
 use crate::NotEqualError;
@@ -58,11 +58,11 @@ unsafe impl GlobalReclaimer for Leaking {
 
 /********** impl GenericReclaimer *****************************************************************/
 
-unsafe impl GenericReclaimer for Leaking {
+unsafe impl OwningReclaimer for Leaking {
     type Handle = Handle;
 
     #[inline]
-    fn local_handle(&self) -> Self::Handle {
+    fn owning_local_handle(&self) -> Self::Handle {
         Handle
     }
 }
