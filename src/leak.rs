@@ -73,6 +73,7 @@ unsafe impl Reclaimer for Leaking {
     type Global = ();
     type Header = ();
 
+    #[inline]
     fn new() -> Self {
         Leaking
     }

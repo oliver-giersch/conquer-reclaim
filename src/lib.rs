@@ -120,8 +120,8 @@ pub struct Unprotected<T, R, N> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// TODO: Docs...
-#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub struct NotEqualError(());
+#[derive(Debug, Default, Copy, Clone, Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub struct NotEqualError;
 
 /********** public functions **********************************************************************/
 

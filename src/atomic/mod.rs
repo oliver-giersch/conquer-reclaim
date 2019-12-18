@@ -314,7 +314,7 @@ impl<T, R: Reclaimer, N: Unsigned> Atomic<T, R, N> {
     ) -> Result<MaybeNull<MarkedNonNull<T, N>>, NotEqualError> {
         match self.load_raw(order) {
             ptr if ptr == expected => Ok(MaybeNull::from(ptr)),
-            _ => Err(NotEqualError(())),
+            _ => Err(NotEqualError),
         }
     }
 }
