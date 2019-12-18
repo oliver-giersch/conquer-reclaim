@@ -74,7 +74,7 @@ pub unsafe trait Protect: Clone + Sized {
     /// an optional protected [`Shared`] reference.
     ///
     /// `protect` takes an [`Ordering`] argument ...
-    fn protect<T, N: Unsigned>(
+    fn protect<T, N: Unsigned + 'static>(
         &mut self,
         src: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
@@ -85,7 +85,7 @@ pub unsafe trait Protect: Clone + Sized {
     /// reference.
     ///
     /// `protect_if_equal` takes and [`Ordering`] argument ...
-    fn protect_if_equal<T, N: Unsigned>(
+    fn protect_if_equal<T, N: Unsigned + 'static>(
         &mut self,
         src: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,

@@ -119,7 +119,7 @@ unsafe impl Protect for Guard {
     fn release(&mut self) {}
 
     #[inline]
-    fn protect<T, N: Unsigned>(
+    fn protect<T, N: Unsigned + 'static>(
         &mut self,
         atomic: &Atomic<T, N>,
         order: Ordering,
@@ -129,7 +129,7 @@ unsafe impl Protect for Guard {
     }
 
     #[inline]
-    fn protect_if_equal<T, N: Unsigned>(
+    fn protect_if_equal<T, N: Unsigned + 'static>(
         &mut self,
         atomic: &Atomic<T, N>,
         expected: MarkedPtr<T, N>,

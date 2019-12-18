@@ -23,7 +23,7 @@ pub struct Guarded<T, G, N> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, G: Protect, N: Unsigned> Guarded<T, G, N> {
+impl<T, G: Protect, N: Unsigned + 'static> Guarded<T, G, N> {
     /// TODO: docs...
     #[inline]
     pub fn try_fuse(

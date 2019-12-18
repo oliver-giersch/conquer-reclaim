@@ -44,7 +44,7 @@ impl<'g, T, R: Reclaimer, N: Unsigned + 'static> Shared<'g, T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T: fmt::Debug, R, N: Unsigned> fmt::Debug for Shared<'_, T, R, N> {
+impl<T: fmt::Debug, R, N: Unsigned + 'static> fmt::Debug for Shared<'_, T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (ptr, tag) = self.inner.decompose();
@@ -54,7 +54,7 @@ impl<T: fmt::Debug, R, N: Unsigned> fmt::Debug for Shared<'_, T, R, N> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Pointer for Shared<'_, T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
@@ -69,6 +69,6 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> MarkedNonNullable for Shared<'_, T,
 
 /********** impl NonNullable **********************************************************************/
 
-impl<T, R, N: Unsigned> NonNullable for Shared<'_, T, R, N> {
+impl<T, R, N: Unsigned + 'static> NonNullable for Shared<'_, T, R, N> {
     impl_non_nullable!();
 }

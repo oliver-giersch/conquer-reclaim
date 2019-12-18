@@ -23,7 +23,7 @@ use crate::{Owned, Shared, Unprotected};
 
 /********** impl Clone ****************************************************************************/
 
-impl<T: Clone, R: Reclaimer, N: Unsigned> Clone for Owned<T, R, N> {
+impl<T: Clone, R: Reclaimer, N: Unsigned + 'static> Clone for Owned<T, R, N> {
     #[inline]
     fn clone(&self) -> Self {
         let (reference, tag) = unsafe { self.inner.decompose_ref() };
@@ -33,12 +33,12 @@ impl<T: Clone, R: Reclaimer, N: Unsigned> Clone for Owned<T, R, N> {
 
 /********** impl Send + Sync **********************************************************************/
 
-unsafe impl<T, R: Reclaimer, N: Unsigned> Send for Owned<T, R, N> where T: Send {}
-unsafe impl<T, R: Reclaimer, N: Unsigned> Sync for Owned<T, R, N> where T: Sync {}
+unsafe impl<T, R: Reclaimer, N: Unsigned + 'static> Send for Owned<T, R, N> where T: Send {}
+unsafe impl<T, R: Reclaimer, N: Unsigned + 'static> Sync for Owned<T, R, N> where T: Sync {}
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> Owned<T, R, N> {
     /// Creates a new heap-allocated [`Record<T>`](Record) and returns an owning
     /// handle to it.
     #[inline]
@@ -286,7 +286,7 @@ impl<T, R: Reclaimer, N: Unsigned> Owned<T, R, N> {
 
 /********** impl AsRef ****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> AsRef<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> AsRef<T> for Owned<T, R, N> {
     #[inline]
     fn as_ref(&self) -> &T {
         self.deref()
@@ -295,7 +295,7 @@ impl<T, R: Reclaimer, N: Unsigned> AsRef<T> for Owned<T, R, N> {
 
 /********** impl AsMut ****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> AsMut<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> AsMut<T> for Owned<T, R, N> {
     #[inline]
     fn as_mut(&mut self) -> &mut T {
         self.deref_mut()
@@ -304,7 +304,7 @@ impl<T, R: Reclaimer, N: Unsigned> AsMut<T> for Owned<T, R, N> {
 
 /********** impl Borrow ***************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> Borrow<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> Borrow<T> for Owned<T, R, N> {
     #[inline]
     fn borrow(&self) -> &T {
         self.deref()
@@ -313,7 +313,7 @@ impl<T, R: Reclaimer, N: Unsigned> Borrow<T> for Owned<T, R, N> {
 
 /********** impl BorrowMut ************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> BorrowMut<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> BorrowMut<T> for Owned<T, R, N> {
     #[inline]
     fn borrow_mut(&mut self) -> &mut T {
         self.deref_mut()
@@ -322,7 +322,7 @@ impl<T, R: Reclaimer, N: Unsigned> BorrowMut<T> for Owned<T, R, N> {
 
 /********** impl Default **************************************************************************/
 
-impl<T: Default, R: Reclaimer, N: Unsigned> Default for Owned<T, R, N> {
+impl<T: Default, R: Reclaimer, N: Unsigned + 'static> Default for Owned<T, R, N> {
     #[inline]
     fn default() -> Self {
         Self::new(T::default())
@@ -331,7 +331,7 @@ impl<T: Default, R: Reclaimer, N: Unsigned> Default for Owned<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> fmt::Debug for Owned<T, R, N>
+impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Debug for Owned<T, R, N>
 where
     T: fmt::Debug,
 {
@@ -344,7 +344,7 @@ where
 
 /********** impl Deref ****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> Deref for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> Deref for Owned<T, R, N> {
     type Target = T;
 
     #[inline]
@@ -355,7 +355,7 @@ impl<T, R: Reclaimer, N: Unsigned> Deref for Owned<T, R, N> {
 
 /********** impl DerefMut *************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> DerefMut for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> DerefMut for Owned<T, R, N> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.inner.as_mut() }
@@ -364,7 +364,7 @@ impl<T, R: Reclaimer, N: Unsigned> DerefMut for Owned<T, R, N> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Pointer for Owned<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
@@ -373,7 +373,7 @@ impl<T, R: Reclaimer, N: Unsigned> fmt::Pointer for Owned<T, R, N> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> Drop for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> Drop for Owned<T, R, N> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -385,7 +385,7 @@ impl<T, R: Reclaimer, N: Unsigned> Drop for Owned<T, R, N> {
 
 /********** impl From *****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> From<T> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> From<T> for Owned<T, R, N> {
     #[inline]
     fn from(owned: T) -> Self {
         Self::new(owned)
@@ -394,7 +394,7 @@ impl<T, R: Reclaimer, N: Unsigned> From<T> for Owned<T, R, N> {
 
 /********** impl TryFrom **************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> TryFrom<Atomic<T, R, N>> for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> TryFrom<Atomic<T, R, N>> for Owned<T, R, N> {
     type Error = NullError;
 
     #[inline]
@@ -405,12 +405,12 @@ impl<T, R: Reclaimer, N: Unsigned> TryFrom<Atomic<T, R, N>> for Owned<T, R, N> {
 
 /********** impl MarkedNonNullable ****************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> MarkedNonNullable for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> MarkedNonNullable for Owned<T, R, N> {
     impl_marked_non_nullable!();
 }
 
 /********** impl NonNullable **********************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> NonNullable for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> NonNullable for Owned<T, R, N> {
     impl_non_nullable!();
 }

@@ -27,14 +27,14 @@ pub trait GuardRef<'g> {
     type Reclaimer: Reclaimer;
 
     /// TODO: Docs...
-    fn load_protected<T, N: Unsigned>(
+    fn load_protected<T, N: Unsigned + 'static>(
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
     ) -> MaybeNull<Shared<'g, T, Self::Reclaimer, N>>;
 
     /// TODO: Docs...
-    fn load_protected_if_equal<T, N: Unsigned>(
+    fn load_protected_if_equal<T, N: Unsigned + 'static>(
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
@@ -51,7 +51,7 @@ where
     type Reclaimer = G::Reclaimer;
 
     #[inline]
-    fn load_protected<T, N: Unsigned>(
+    fn load_protected<T, N: Unsigned + 'static>(
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
@@ -60,7 +60,7 @@ where
     }
 
     #[inline]
-    fn load_protected_if_equal<T, N: Unsigned>(
+    fn load_protected_if_equal<T, N: Unsigned + 'static>(
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
@@ -79,7 +79,7 @@ where
     type Reclaimer = G::Reclaimer;
 
     #[inline]
-    fn load_protected<T, N: Unsigned>(
+    fn load_protected<T, N: Unsigned + 'static>(
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
@@ -88,7 +88,7 @@ where
     }
 
     #[inline]
-    fn load_protected_if_equal<T, N: Unsigned>(
+    fn load_protected_if_equal<T, N: Unsigned + 'static>(
         self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,

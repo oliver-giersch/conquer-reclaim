@@ -70,21 +70,21 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for MaybeNull<Shared<'_,
 
 /********** Unlinked ******************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> CompareArg for Unlinked<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Unlinked<T, R, N> {
     impl_compare_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> CompareArg for Option<Unlinked<T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Option<Unlinked<T, R, N>> {
     impl_compare_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> CompareArg for MaybeNull<Unlinked<T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for MaybeNull<Unlinked<T, R, N>> {
     impl_compare_arg_for_maybe_null!();
 }
 
 /********** Unprotected ***************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> CompareArg for Unprotected<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Unprotected<T, R, N> {
     type Unlinked = MaybeNull<Unlinked<Self::Item, Self::Reclaimer, Self::MarkBits>>;
 
     #[inline]

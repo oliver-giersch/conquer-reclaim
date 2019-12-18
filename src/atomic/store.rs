@@ -67,15 +67,15 @@ macro_rules! impl_store_arg_for_maybe_null {
 
 /********** Owned *********************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for Owned<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Owned<T, R, N> {
     impl_store_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for Option<Owned<T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Option<Owned<T, R, N>> {
     impl_store_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for MaybeNull<Owned<T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for MaybeNull<Owned<T, R, N>> {
     impl_store_arg_for_maybe_null!();
 }
 
@@ -95,20 +95,20 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for MaybeNull<Shared<'_, T
 
 /********** Unlinked ******************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for Unlinked<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Unlinked<T, R, N> {
     impl_store_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for Option<Unlinked<T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Option<Unlinked<T, R, N>> {
     impl_store_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for MaybeNull<Unlinked<T, R, N>> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for MaybeNull<Unlinked<T, R, N>> {
     impl_store_arg_for_maybe_null!();
 }
 
 /********** Unprotected ***************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> StoreArg for Unprotected<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Unprotected<T, R, N> {
     impl_store_arg_for_type!();
 }

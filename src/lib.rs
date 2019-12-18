@@ -51,7 +51,7 @@ use crate::typenum::Unsigned;
 /// allocate the appropriate [`RecordHeader`][Reclaim::RecordHeader] type
 /// for its generic [`Reclaim`] parameter alongside their actual content.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub struct Owned<T, R: Reclaimer, N: Unsigned> {
+pub struct Owned<T, R: Reclaimer, N: Unsigned + 'static> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(T, R)>,
 }
@@ -127,6 +127,6 @@ pub struct NotEqualError;
 
 /// TODO: Docs...
 #[inline(always)]
-pub fn null<T, R: Reclaimer, N: Unsigned>() -> Unprotected<T, R, N> {
+pub const fn null<T, R, N>() -> Unprotected<T, R, N> {
     Unprotected::null()
 }

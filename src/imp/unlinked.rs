@@ -10,7 +10,7 @@ use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> Unlinked<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> Unlinked<T, R, N> {
     impl_common_from!();
     impl_common!();
 
@@ -35,7 +35,7 @@ impl<T, R: Reclaimer, N: Unsigned> Unlinked<T, R, N> {
     }
 }
 
-impl<T, R: GlobalReclaimer, N: Unsigned> Unlinked<T, R, N> {
+impl<T, R: GlobalReclaimer, N: Unsigned + 'static> Unlinked<T, R, N> {
     #[inline]
     pub unsafe fn retire(self)
     where
@@ -52,7 +52,7 @@ impl<T, R: GlobalReclaimer, N: Unsigned> Unlinked<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Debug for Unlinked<T, R, N> {
+impl<T, R, N: Unsigned + 'static> fmt::Debug for Unlinked<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (ptr, tag) = self.inner.decompose();
@@ -62,7 +62,7 @@ impl<T, R, N: Unsigned> fmt::Debug for Unlinked<T, R, N> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Pointer for Unlinked<T, R, N> {
+impl<T, R, N: Unsigned + 'static> fmt::Pointer for Unlinked<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_non_null(), f)
@@ -71,12 +71,12 @@ impl<T, R, N: Unsigned> fmt::Pointer for Unlinked<T, R, N> {
 
 /********** impl MarkedNonNullable ****************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned> MarkedNonNullable for Unlinked<T, R, N> {
+impl<T, R: Reclaimer, N: Unsigned + 'static> MarkedNonNullable for Unlinked<T, R, N> {
     impl_marked_non_nullable!();
 }
 
 /********** impl NonNullable **********************************************************************/
 
-impl<T, R, N: Unsigned> NonNullable for Unlinked<T, R, N> {
+impl<T, R, N: Unsigned + 'static> NonNullable for Unlinked<T, R, N> {
     impl_non_nullable!();
 }
