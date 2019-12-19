@@ -16,7 +16,7 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> Unlinked<T, R, N> {
 
     #[inline]
     pub fn into_retired(self) -> Retired<R> {
-        Retired::new(self.inner.decompose_non_null())
+        unsafe { Retired::new(self.inner.decompose_non_null()) }
     }
 
     #[inline]

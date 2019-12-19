@@ -22,8 +22,10 @@ use crate::traits::Reclaimer;
 // Retired
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A type-erased fat pointer to a retired record.
-pub struct Retired<R>(NonNull<dyn Any + 'static>, PhantomData<R>);
+pub struct Retired<R> {
+    raw: RawRetired,
+    _marker: PhantomData<R>,
+}
 
 /********** impl inherent *************************************************************************/
 
@@ -43,15 +45,31 @@ impl<R: Reclaimer + 'static> Retired<R> {
     ///   any non-static references, it must be ensured that these are **not**
     ///   accessed by the [`drop`][Drop::drop] function.
     #[inline]
-    pub fn new<'a, T: 'a>(record: NonNull<T>) -> Self {
-        unsafe {
-            let any: NonNull<dyn Any + 'a> = Record::<T, R>::from_raw_non_null(record);
-            let any: NonNull<dyn Any + 'static> = mem::transmute(any);
+    pub(crate) unsafe fn new<'a, T: 'a>(ptr: NonNull<T>) -> Self {
+        let any: NonNull<dyn Any + 'a> = Record::<T, R>::from_raw_non_null(ptr);
+        let any: NonNull<dyn Any + 'static> = mem::transmute(any);
 
-            Self(any, PhantomData)
-        }
+        Self { raw: RawRetired { ptr: any }, _marker: PhantomData }
     }
 
+    #[inline]
+    pub fn into_raw(self) -> RawRetired {
+        self.raw
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// RawRetired
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// A type-erased fat pointer to a retired record.
+pub struct RawRetired {
+    ptr: NonNull<dyn Any + 'static>,
+}
+
+/********** impl inherent *************************************************************************/
+
+impl RawRetired {
     /// Converts a retired record to a raw pointer.
     ///
     /// Since retired records are type-erased trait object (fat) pointers to
@@ -59,14 +77,14 @@ impl<R: Reclaimer + 'static> Retired<R> {
     /// of the pointer is returned, i.e. a pointer to an `()`.
     #[inline]
     pub fn as_ptr(&self) -> *const () {
-        self.0.as_ptr() as *mut () as *const ()
+        self.ptr.as_ptr() as *mut () as *const ()
     }
 
     /// Returns the numeric representation of the retired record's memory
     /// address.
     #[inline]
     pub fn address(&self) -> usize {
-        self.0.as_ptr() as *mut () as usize
+        self.ptr.as_ptr() as *mut () as usize
     }
 
     /// Reclaims the retired record by dropping it and de-allocating its memory.
@@ -77,13 +95,13 @@ impl<R: Reclaimer + 'static> Retired<R> {
     /// thread or scope still has some reference to the record.
     #[inline]
     pub unsafe fn reclaim(&mut self) {
-        mem::drop(Box::from_raw(self.0.as_ptr()));
+        mem::drop(Box::from_raw(self.ptr.as_ptr()));
     }
 }
 
 /********** impl PartialEq ************************************************************************/
 
-impl<R: Reclaimer + 'static> PartialEq for Retired<R> {
+impl PartialEq for RawRetired {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.as_ptr().eq(&other.as_ptr())
@@ -92,7 +110,7 @@ impl<R: Reclaimer + 'static> PartialEq for Retired<R> {
 
 /********** impl PartialOrd ***********************************************************************/
 
-impl<R: Reclaimer + 'static> PartialOrd for Retired<R> {
+impl PartialOrd for RawRetired {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         self.as_ptr().partial_cmp(&other.as_ptr())
@@ -101,7 +119,7 @@ impl<R: Reclaimer + 'static> PartialOrd for Retired<R> {
 
 /********** impl Ord ******************************************************************************/
 
-impl<R: Reclaimer + 'static> Ord for Retired<R> {
+impl Ord for RawRetired {
     #[inline]
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.as_ptr().cmp(&other.as_ptr())
@@ -110,11 +128,11 @@ impl<R: Reclaimer + 'static> Ord for Retired<R> {
 
 /********** impl Eq *******************************************************************************/
 
-impl<R: Reclaimer + 'static> Eq for Retired<R> {}
+impl Eq for RawRetired {}
 
 /********** impl Debug ****************************************************************************/
 
-impl<R: Reclaimer + 'static> fmt::Debug for Retired<R> {
+impl fmt::Debug for RawRetired {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Retired").field("address", &self.as_ptr()).finish()
@@ -123,7 +141,7 @@ impl<R: Reclaimer + 'static> fmt::Debug for Retired<R> {
 
 /********** impl Display **************************************************************************/
 
-impl<R: Reclaimer + 'static> fmt::Display for Retired<R> {
+impl fmt::Display for RawRetired {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.as_ptr(), f)
@@ -132,7 +150,7 @@ impl<R: Reclaimer + 'static> fmt::Display for Retired<R> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<R: Reclaimer + 'static> fmt::Pointer for Retired<R> {
+impl fmt::Pointer for RawRetired {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.as_ptr(), f)
