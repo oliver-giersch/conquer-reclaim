@@ -34,7 +34,7 @@ use conquer_pointer::{MarkedNonNull, MarkedPtr};
 pub use crate::atomic::{Atomic, CompareExchangeError};
 pub use crate::guarded::Guarded;
 pub use crate::record::Record;
-pub use crate::retired::RawRetired;
+pub use crate::retired::{RawRetired, Retired};
 pub use crate::traits::{
     GlobalReclaimer, OwningReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
 };
