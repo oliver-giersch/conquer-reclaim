@@ -9,7 +9,7 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
-    pub use crate::traits::{GlobalReclaim, LocalRef, Protect, ProtectRegion, Reclaim};
+    pub use crate::traits::{GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimerLocalRef};
 }
 
 #[macro_use]
@@ -35,7 +35,7 @@ pub use crate::atomic::{Atomic, CompareExchangeError};
 pub use crate::guarded::Guarded;
 pub use crate::record::Record;
 pub use crate::retired::{RawRetired, Retired};
-pub use crate::traits::{GlobalReclaim, LocalRef, Protect, ProtectRegion, Reclaim};
+pub use crate::traits::{GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimerLocalRef};
 
 use crate::typenum::Unsigned;
 

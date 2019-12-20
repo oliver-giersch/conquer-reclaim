@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use conquer_reclaim::conquer_pointer::MaybeNull::NotNull;
 use conquer_reclaim::typenum::U0;
-use conquer_reclaim::{GlobalReclaim, LocalRef, Owned, Reclaim};
+use conquer_reclaim::{GlobalReclaim, Owned, Reclaim, ReclaimerLocalRef};
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
 

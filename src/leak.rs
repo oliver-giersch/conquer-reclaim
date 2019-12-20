@@ -9,7 +9,7 @@ use conquer_pointer::{
 };
 
 use crate::retired::Retired;
-use crate::traits::{GlobalReclaim, LocalRef, Protect, ProtectRegion, Reclaim};
+use crate::traits::{GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimerLocalRef};
 use crate::typenum::Unsigned;
 use crate::NotEqualError;
 
@@ -68,7 +68,7 @@ pub struct Handle;
 
 /********** impl ReclaimHandle ********************************************************************/
 
-unsafe impl LocalRef for Handle {
+unsafe impl ReclaimerLocalRef for Handle {
     type Guard = Guard;
     type Reclaimer = Leaking;
 

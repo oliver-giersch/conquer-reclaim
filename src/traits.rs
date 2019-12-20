@@ -14,7 +14,7 @@ use crate::{NotEqualError, Shared};
 pub trait GlobalReclaim: Reclaim {
     fn build_local_ref() -> Self::Ref;
 
-    fn build_guard() -> <Self::Ref as LocalRef>::Guard {
+    fn build_guard() -> <Self::Ref as ReclaimerLocalRef>::Guard {
         Self::build_local_ref().into_guard()
     }
 
@@ -29,7 +29,7 @@ pub trait GlobalReclaim: Reclaim {
 
 pub unsafe trait Reclaim: Default + Sync + Sized + 'static {
     type Header: Default + Sync + Sized + 'static;
-    type Ref: LocalRef<Reclaimer = Self>;
+    type Ref: ReclaimerLocalRef<Reclaimer = Self>;
     // type Ref<'global>: LocalRef<Reclaimer = Self> + 'global;
 
     fn new() -> Self;
@@ -39,7 +39,7 @@ pub unsafe trait Reclaim: Default + Sync + Sized + 'static {
 // LocalRef (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait LocalRef: Clone + Sized {
+pub unsafe trait ReclaimerLocalRef: Clone + Sized {
     type Guard: Protect<Reclaimer = Self::Reclaimer>;
     type Reclaimer: Reclaim;
 
