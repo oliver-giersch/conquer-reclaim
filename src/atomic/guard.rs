@@ -7,7 +7,7 @@ use conquer_pointer::{
 };
 
 use crate::atomic::Atomic;
-use crate::traits::{Protect, ProtectRegion, Reclaimer};
+use crate::traits::{Protect, ProtectRegion, Reclaim};
 use crate::typenum::Unsigned;
 use crate::{NotEqualError, Shared};
 
@@ -24,7 +24,7 @@ use crate::{NotEqualError, Shared};
 /// is also implemented for *shared* references.
 pub trait GuardRef<'g> {
     /// TODO: Docs...
-    type Reclaimer: Reclaimer;
+    type Reclaimer: Reclaim;
 
     /// TODO: Docs...
     fn load_protected<T, N: Unsigned + 'static>(

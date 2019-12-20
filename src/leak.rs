@@ -9,9 +9,7 @@ use conquer_pointer::{
 };
 
 use crate::retired::Retired;
-use crate::traits::{
-    GlobalReclaimer, OwningReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
-};
+use crate::traits::{GlobalReclaim, LocalRef, Protect, ProtectRegion, Reclaim};
 use crate::typenum::Unsigned;
 use crate::NotEqualError;
 
@@ -41,37 +39,18 @@ pub struct Leaking;
 
 /********** impl GlobalReclaim ********************************************************************/
 
-unsafe impl GlobalReclaimer for Leaking {
+impl GlobalReclaim for Leaking {
     #[inline]
-    fn handle() -> Self::Handle {
-        Handle
-    }
-
-    #[inline]
-    fn guard() -> <Self::Handle as ReclaimerHandle>::Guard {
-        Guard
-    }
-
-    #[inline]
-    unsafe fn retire(_: Retired<Self>) {}
-}
-
-/********** impl GenericReclaimer *****************************************************************/
-
-unsafe impl OwningReclaimer for Leaking {
-    type Handle = Handle;
-
-    #[inline]
-    fn owning_local_handle(&self) -> Self::Handle {
+    fn build_local_ref() -> Self::Ref {
         Handle
     }
 }
 
 /********** impl Reclaimer ************************************************************************/
 
-unsafe impl Reclaimer for Leaking {
-    type Global = ();
+unsafe impl Reclaim for Leaking {
     type Header = ();
+    type Ref = Handle;
 
     #[inline]
     fn new() -> Self {
@@ -89,12 +68,19 @@ pub struct Handle;
 
 /********** impl ReclaimHandle ********************************************************************/
 
-unsafe impl ReclaimerHandle for Handle {
-    type Reclaimer = Leaking;
+unsafe impl LocalRef for Handle {
     type Guard = Guard;
+    type Reclaimer = Leaking;
 
-    #[inline]
-    fn guard(self) -> Self::Guard {
+    fn from_ref(global: &Self::Reclaimer) -> Self {
+        Handle
+    }
+
+    unsafe fn from_raw(global: *const Self::Reclaimer) -> Self {
+        Handle
+    }
+
+    fn into_guard(self) -> Self::Guard {
         Guard
     }
 

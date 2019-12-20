@@ -4,13 +4,13 @@ use core::marker::PhantomData;
 use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 
 use crate::retired::Retired;
-use crate::traits::{GlobalReclaimer, Reclaimer};
+use crate::traits::{GlobalReclaim, Reclaim};
 use crate::typenum::Unsigned;
 use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> Unlinked<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> Unlinked<T, R, N> {
     impl_common_from!();
     impl_common!();
 
@@ -35,7 +35,7 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> Unlinked<T, R, N> {
     }
 }
 
-impl<T, R: GlobalReclaimer, N: Unsigned + 'static> Unlinked<T, R, N> {
+impl<T, R: GlobalReclaim, N: Unsigned + 'static> Unlinked<T, R, N> {
     #[inline]
     pub unsafe fn retire(self)
     where
@@ -71,7 +71,7 @@ impl<T, R, N: Unsigned + 'static> fmt::Pointer for Unlinked<T, R, N> {
 
 /********** impl MarkedNonNullable ****************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> MarkedNonNullable for Unlinked<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> MarkedNonNullable for Unlinked<T, R, N> {
     impl_marked_non_nullable!();
 }
 

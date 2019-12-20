@@ -9,7 +9,7 @@ use core::sync::atomic::Ordering;
 
 use conquer_pointer::{AtomicMarkedPtr, MarkedNonNull, MarkedPtr, MaybeNull};
 
-use crate::traits::Reclaimer;
+use crate::traits::Reclaim;
 use crate::typenum::Unsigned;
 use crate::{NotEqualError, Owned, Shared, Unlinked, Unprotected};
 
@@ -37,8 +37,8 @@ pub struct Atomic<T, R, N> {
 
 /********** impl Send + Sync **********************************************************************/
 
-unsafe impl<T, R: Reclaimer, N: Unsigned> Send for Atomic<T, R, N> where T: Send + Sync {}
-unsafe impl<T, R: Reclaimer, N: Unsigned> Sync for Atomic<T, R, N> where T: Send + Sync {}
+unsafe impl<T, R: Reclaim, N: Unsigned> Send for Atomic<T, R, N> where T: Send + Sync {}
+unsafe impl<T, R: Reclaim, N: Unsigned> Sync for Atomic<T, R, N> where T: Send + Sync {}
 
 /********** impl inherent (const) *****************************************************************/
 
@@ -58,7 +58,7 @@ impl<T, R, N> Atomic<T, R, N> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> Atomic<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> Atomic<T, R, N> {
     /// Allocates a new [`Owned`] containing the given `val` and immediately
     /// storing it an `Atomic`.
     #[inline]
@@ -321,7 +321,7 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> Atomic<T, R, N> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> Default for Atomic<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> Default for Atomic<T, R, N> {
     #[inline]
     fn default() -> Self {
         Self::null()
@@ -340,7 +340,7 @@ impl<T, R, N: Unsigned + 'static> fmt::Debug for Atomic<T, R, N> {
 
 /********** impl From *****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> From<Owned<T, R, N>> for Atomic<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> From<Owned<T, R, N>> for Atomic<T, R, N> {
     #[inline]
     fn from(owned: Owned<T, R, N>) -> Self {
         Self { inner: AtomicMarkedPtr::from(Owned::into_marked_ptr(owned)), _marker: PhantomData }
@@ -349,7 +349,7 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> From<Owned<T, R, N>> for Atomic<T, 
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Pointer for Atomic<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> fmt::Pointer for Atomic<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.load(Ordering::SeqCst), f)
@@ -365,7 +365,7 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Pointer for Atomic<T, R, N> {
 #[derive(Copy, Clone, Debug)]
 pub struct CompareExchangeError<S, T, R, N>
 where
-    R: Reclaimer,
+    R: Reclaim,
     N: Unsigned + 'static,
     S: StoreArg<Item = T, Reclaimer = R, MarkBits = N>,
 {

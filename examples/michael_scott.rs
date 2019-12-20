@@ -3,7 +3,7 @@ use std::ptr;
 use std::sync::atomic::Ordering;
 
 use conquer_reclaim::conquer_pointer::MaybeNull::NotNull;
-use conquer_reclaim::{GlobalReclaimer, Owned, OwningReclaimer, ReclaimerHandle};
+use conquer_reclaim::{GlobalReclaim, LocalRef, Owned, Reclaim};
 use conquer_util::align::Aligned128 as CacheAligned;
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, conquer_reclaim::typenum::U0>;
@@ -12,7 +12,7 @@ type Atomic<T, R> = conquer_reclaim::Atomic<T, R, conquer_reclaim::typenum::U0>;
 // Queue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Queue<T, R: OwningReclaimer> {
+pub struct Queue<T, R: Reclaim> {
     head: CacheAligned<Atomic<Node<T, R>, R>>,
     tail: CacheAligned<Atomic<Node<T, R>, R>>,
     reclaimer: R,
@@ -20,7 +20,7 @@ pub struct Queue<T, R: OwningReclaimer> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: OwningReclaimer> Queue<T, R> {
+impl<T, R: Reclaim> Queue<T, R> {
     const RELEASE_CAS: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
     const RELAXED_CAS: (Ordering, Ordering) = (Ordering::Relaxed, Ordering::Relaxed);
 
@@ -43,14 +43,14 @@ impl<T, R: OwningReclaimer> Queue<T, R> {
 
     /// Derives a [`ReclaimerHandle`] from the [`Queue`]'s internal [`Reclaimer`].
     #[inline]
-    pub fn reclaimer_handle(&self) -> R::Handle {
-        self.reclaimer.owning_local_handle()
+    pub fn reclaimer_handle(&self) -> R::Ref {
+        R::Ref::from_ref(&self.reclaimer)
     }
 
     /// Creates a new (thread-local) [`Handle`] for accessing the queue safely.
     #[inline]
     pub fn handle(&self) -> Handle<T, R> {
-        Handle { handle: self.reclaimer_handle(), queue: self }
+        Handle { local_ref: R::Ref::from_ref(&self.reclaimer), queue: self }
     }
 
     /// Pushes `elem` to the tail of the [`Queue`] using `handle` to protect any memory records.
@@ -60,9 +60,9 @@ impl<T, R: OwningReclaimer> Queue<T, R> {
     /// The caller has to ensure that `handle` has been derived from the same [`Queue`] it is used
     /// to access.
     #[inline]
-    pub unsafe fn push_unchecked(&self, elem: T, handle: &R::Handle) {
+    pub unsafe fn push_unchecked(&self, elem: T, handle: &R::Ref) {
         let mut node = Owned::leak_unprotected(Owned::new(Node::new(elem)));
-        let mut guard = handle.clone().guard();
+        let mut guard = handle.clone().into_guard();
         loop {
             let tail = self.tail().load(&mut guard, Ordering::Acquire).unwrap_unchecked();
             let next = tail.deref().next.load_unprotected(Ordering::Relaxed);
@@ -89,9 +89,9 @@ impl<T, R: OwningReclaimer> Queue<T, R> {
     /// The caller has to ensure that `handle` has been derived from the same [`Queue`] it is used
     /// to access.
     #[inline]
-    pub unsafe fn pop_unchecked(&self, handle: &R::Handle) -> Option<T> {
-        let mut head_guard = handle.clone().guard();
-        let mut next_guard = handle.clone().guard();
+    pub unsafe fn pop_unchecked(&self, handle: &R::Ref) -> Option<T> {
+        let mut head_guard = handle.clone().into_guard();
+        let mut next_guard = handle.clone().into_guard();
 
         let mut head = self.head().load(&mut head_guard, Ordering::Acquire).unwrap_unchecked();
         while let NotNull(next) = head.deref().next.load(&mut next_guard, Ordering::Relaxed) {
@@ -119,23 +119,23 @@ impl<T, R: OwningReclaimer> Queue<T, R> {
     }
 }
 
-impl<T, R: GlobalReclaimer> Queue<T, R> {
+impl<T, R: GlobalReclaim> Queue<T, R> {
     /// Pushes `elem` to the end of the [`Queue`].
     #[inline]
     pub fn push(&self, elem: T) {
-        unsafe { self.push_unchecked(elem, &R::handle()) }
+        unsafe { self.push_unchecked(elem, &R::build_local_ref()) }
     }
 
     /// Pops an element from the head of the [`Queue`] or returns [`None`] if it is empty.
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.pop_unchecked(&R::handle()) }
+        unsafe { self.pop_unchecked(&R::build_local_ref()) }
     }
 }
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: OwningReclaimer> Default for Queue<T, R> {
+impl<T, R: Reclaim> Default for Queue<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -144,7 +144,7 @@ impl<T, R: OwningReclaimer> Default for Queue<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: OwningReclaimer> Drop for Queue<T, R> {
+impl<T, R: Reclaim> Drop for Queue<T, R> {
     #[inline]
     fn drop(&mut self) {
         // this is safe as long as only head the pointer is taken
@@ -160,22 +160,22 @@ impl<T, R: OwningReclaimer> Drop for Queue<T, R> {
 // Handle
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Handle<'q, T, R: OwningReclaimer> {
-    handle: R::Handle,
+pub struct Handle<'q, T, R: Reclaim> {
+    local_ref: R::Ref,
     queue: &'q Queue<T, R>,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: OwningReclaimer> Handle<'_, T, R> {
+impl<T, R: Reclaim> Handle<'_, T, R> {
     #[inline]
     pub fn push(&self, elem: T) {
-        unsafe { self.queue.push_unchecked(elem, &self.handle) };
+        unsafe { self.queue.push_unchecked(elem, &self.local_ref) };
     }
 
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.queue.pop_unchecked(&self.handle) }
+        unsafe { self.queue.pop_unchecked(&self.local_ref) }
     }
 }
 

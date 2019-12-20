@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use conquer_reclaim::conquer_pointer::MaybeNull::NotNull;
 use conquer_reclaim::typenum::U0;
-use conquer_reclaim::{GlobalReclaimer, Owned, OwningReclaimer, ReclaimerHandle};
+use conquer_reclaim::{GlobalReclaim, LocalRef, Owned, Reclaim};
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
 
@@ -12,14 +12,14 @@ type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
 // Stack
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Stack<T, R: OwningReclaimer> {
+pub struct Stack<T, R: Reclaim> {
     head: Atomic<Node<T, R>, R>,
     reclaimer: R,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: OwningReclaimer> Stack<T, R> {
+impl<T, R: Reclaim> Stack<T, R> {
     const RELEASE_CAS: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
     const RELAXED_CAS: (Ordering, Ordering) = (Ordering::Relaxed, Ordering::Relaxed);
 
@@ -31,7 +31,7 @@ impl<T, R: OwningReclaimer> Stack<T, R> {
 
     #[inline]
     pub fn handle(&self) -> StackHandle<T, R> {
-        StackHandle { stack: self, handle: self.reclaimer.owning_local_handle() }
+        StackHandle { stack: self, local_ref: R::Ref::from_ref(&self.reclaimer) }
     }
 
     #[inline]
@@ -49,8 +49,8 @@ impl<T, R: OwningReclaimer> Stack<T, R> {
     }
 
     #[inline]
-    pub unsafe fn pop_unchecked(&self, handle: &R::Handle) -> Option<T> {
-        let mut guard = handle.clone().guard();
+    pub unsafe fn pop_unchecked(&self, handle: &R::Ref) -> Option<T> {
+        let mut guard = handle.clone().into_guard();
         // (stack:2) this acquire load syncs-with the release CAS (stack:1)
         while let NotNull(head) = self.head.load(&mut guard, Ordering::Acquire) {
             let next = head.deref().next.load_unprotected(Ordering::Relaxed);
@@ -66,16 +66,16 @@ impl<T, R: OwningReclaimer> Stack<T, R> {
     }
 }
 
-impl<T, R: GlobalReclaimer> Stack<T, R> {
+impl<T, R: GlobalReclaim> Stack<T, R> {
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.pop_unchecked(&R::handle()) }
+        unsafe { self.pop_unchecked(&R::build_local_ref()) }
     }
 }
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: OwningReclaimer> Default for Stack<T, R> {
+impl<T, R: Reclaim> Default for Stack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -84,7 +84,7 @@ impl<T, R: OwningReclaimer> Default for Stack<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: OwningReclaimer> Drop for Stack<T, R> {
+impl<T, R: Reclaim> Drop for Stack<T, R> {
     #[inline]
     fn drop(&mut self) {
         let mut curr = self.head.take();
@@ -99,14 +99,14 @@ impl<T, R: OwningReclaimer> Drop for Stack<T, R> {
 // StackHandle
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct StackHandle<'s, T, R: OwningReclaimer> {
+pub struct StackHandle<'s, T, R: Reclaim> {
     stack: &'s Stack<T, R>,
-    handle: R::Handle,
+    local_ref: R::Ref,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: OwningReclaimer> StackHandle<'_, T, R> {
+impl<T, R: Reclaim> StackHandle<'_, T, R> {
     #[inline]
     pub fn push(&self, elem: T) {
         self.stack.push(elem);
@@ -114,7 +114,7 @@ impl<T, R: OwningReclaimer> StackHandle<'_, T, R> {
 
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.stack.pop_unchecked(&self.handle) }
+        unsafe { self.stack.pop_unchecked(&self.local_ref) }
     }
 }
 
@@ -129,7 +129,7 @@ struct Node<T, R> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: OwningReclaimer> Node<T, R> {
+impl<T, R: Reclaim> Node<T, R> {
     #[inline]
     fn new(elem: T) -> Self {
         Self { inner: ManuallyDrop::new(elem), next: Atomic::null() }

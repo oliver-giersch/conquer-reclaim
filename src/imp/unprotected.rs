@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 
 use conquer_pointer::MarkedPtr;
 
-use crate::traits::Reclaimer;
+use crate::traits::Reclaim;
 use crate::typenum::Unsigned;
 use crate::Unprotected;
 
@@ -29,7 +29,7 @@ impl<T, R, N> Unprotected<T, R, N> {
     }
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> Unprotected<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> Unprotected<T, R, N> {
     #[inline]
     pub fn is_null(self) -> bool {
         self.inner.is_null()
@@ -45,7 +45,7 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> Unprotected<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Debug for Unprotected<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> fmt::Debug for Unprotected<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (ptr, tag) = self.inner.decompose();
@@ -55,7 +55,7 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Debug for Unprotected<T, R, N>
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Pointer for Unprotected<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> fmt::Pointer for Unprotected<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)

@@ -1,6 +1,6 @@
 use conquer_pointer::{MarkedPtr, MaybeNull};
 
-use crate::traits::Reclaimer;
+use crate::traits::Reclaim;
 use crate::typenum::Unsigned;
 use crate::{Owned, Shared, Unlinked, Unprotected};
 
@@ -12,7 +12,7 @@ use crate::{Owned, Shared, Unlinked, Unprotected};
 /// swap operations.
 pub trait StoreArg {
     type Item: Sized;
-    type Reclaimer: Reclaimer;
+    type Reclaimer: Reclaim;
     type MarkBits: Unsigned;
 
     fn as_marked_ptr(&self) -> MarkedPtr<Self::Item, Self::MarkBits>;
@@ -67,48 +67,48 @@ macro_rules! impl_store_arg_for_maybe_null {
 
 /********** Owned *********************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Owned<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Owned<T, R, N> {
     impl_store_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Option<Owned<T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Option<Owned<T, R, N>> {
     impl_store_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for MaybeNull<Owned<T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for MaybeNull<Owned<T, R, N>> {
     impl_store_arg_for_maybe_null!();
 }
 
 /********** Shared ********************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Shared<'_, T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Shared<'_, T, R, N> {
     impl_store_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Option<Shared<'_, T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Option<Shared<'_, T, R, N>> {
     impl_store_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for MaybeNull<Shared<'_, T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for MaybeNull<Shared<'_, T, R, N>> {
     impl_store_arg_for_maybe_null!();
 }
 
 /********** Unlinked ******************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Unlinked<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Unlinked<T, R, N> {
     impl_store_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Option<Unlinked<T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Option<Unlinked<T, R, N>> {
     impl_store_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for MaybeNull<Unlinked<T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for MaybeNull<Unlinked<T, R, N>> {
     impl_store_arg_for_maybe_null!();
 }
 
 /********** Unprotected ***************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> StoreArg for Unprotected<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Unprotected<T, R, N> {
     impl_store_arg_for_type!();
 }

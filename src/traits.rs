@@ -8,50 +8,46 @@ use crate::typenum::Unsigned;
 use crate::{NotEqualError, Shared};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// GlobalReclaimer (trait)
+// GlobalReclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait GlobalReclaimer: OwningReclaimer {
-    fn handle() -> Self::Handle;
-    fn guard() -> <Self::Handle as ReclaimerHandle>::Guard;
-    unsafe fn retire(record: Retired<Self>);
+pub trait GlobalReclaim: Reclaim {
+    fn build_local_ref() -> Self::Ref;
+
+    fn build_guard() -> <Self::Ref as LocalRef>::Guard {
+        Self::build_local_ref().into_guard()
+    }
+
+    unsafe fn retire(retired: Retired<Self>) {
+        Self::build_local_ref().retire(retired);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// GenericReclaimer (trait)
+// Reclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait OwningReclaimer: Reclaimer {
-    type Handle: ReclaimerHandle<Reclaimer = Self> + 'static;
-
-    // TODO: fn owning_local_handle(&self) -> Self::Handle<'_, '_>;
-    fn owning_local_handle(&self) -> Self::Handle;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Reclaimer (trait)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub unsafe trait Reclaimer: Default + Sync + Sized + 'static {
-    type Global: Default + Sync + Sized;
-    // TODO: type Handle<'local, 'global>: ReclaimerHandle<Reclaimer = Self> + 'local + 'global;
+pub unsafe trait Reclaim: Default + Sync + Sized + 'static {
     type Header: Default + Sync + Sized + 'static;
+    type Ref: LocalRef<Reclaimer = Self>;
+    // type Ref<'global>: LocalRef<Reclaimer = Self> + 'global;
 
     fn new() -> Self;
-    // TODO: fn ref_local_handle<'global>(&'global self) -> Self::Handle<'_, 'global>;
-    // TODO: unsafe fn raw_local_handle(&self) -> Self::Handle<'_, '_>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// ReclaimerHandle (trait)
+// LocalRef (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait ReclaimerHandle: Clone + Sized {
-    type Reclaimer: Reclaimer;
+pub unsafe trait LocalRef: Clone + Sized {
     type Guard: Protect<Reclaimer = Self::Reclaimer>;
+    type Reclaimer: Reclaim;
 
-    fn guard(self) -> Self::Guard;
-    unsafe fn retire(self, record: Retired<Self::Reclaimer>);
+    fn from_ref(global: &Self::Reclaimer) -> Self;
+    unsafe fn from_raw(global: *const Self::Reclaimer) -> Self;
+
+    fn into_guard(self) -> Self::Guard;
+    unsafe fn retire(self, retired: Retired<Self::Reclaimer>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -62,7 +58,7 @@ pub unsafe trait ReclaimerHandle: Clone + Sized {
 /// [`Reclaimer`].
 pub unsafe trait Protect: Clone + Sized {
     /// The associated memory reclaimer.
-    type Reclaimer: Reclaimer;
+    type Reclaimer: Reclaim;
 
     /// Releases any protection that may be provided by the guard.
     ///

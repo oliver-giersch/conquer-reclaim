@@ -3,7 +3,7 @@ use core::ptr::NonNull;
 
 use memoffset::offset_of;
 
-use crate::traits::Reclaimer;
+use crate::traits::Reclaim;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Record
@@ -19,7 +19,7 @@ use crate::traits::Reclaimer;
 /// using a given memory reclamation scheme and should only be accessed by the
 /// reclamation scheme itself.
 #[derive(Debug, Default, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Record<T, R: Reclaimer> {
+pub struct Record<T, R: Reclaim> {
     /// The record's header
     pub(crate) header: R::Header,
     /// The record's wrapped (inner) element
@@ -28,7 +28,7 @@ pub struct Record<T, R: Reclaimer> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaimer> Record<T, R> {
+impl<T, R: Reclaim> Record<T, R> {
     /// Creates a new record with the specified `elem` and a default header.
     #[inline]
     pub fn new(elem: T) -> Self {

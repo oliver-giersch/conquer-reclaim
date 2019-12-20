@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 
 use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
 
-use crate::traits::Reclaimer;
+use crate::traits::Reclaim;
 use crate::typenum::Unsigned;
 use crate::Shared;
 
@@ -22,7 +22,7 @@ impl<T, R, N> Copy for Shared<'_, T, R, N> {}
 
 /********** impl inherent *************************************************************************/
 
-impl<'g, T, R: Reclaimer, N: Unsigned + 'static> Shared<'g, T, R, N> {
+impl<'g, T, R: Reclaim, N: Unsigned + 'static> Shared<'g, T, R, N> {
     impl_common_from!();
     impl_common!();
 
@@ -54,7 +54,7 @@ impl<T: fmt::Debug, R, N: Unsigned + 'static> fmt::Debug for Shared<'_, T, R, N>
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Pointer for Shared<'_, T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> fmt::Pointer for Shared<'_, T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
@@ -63,7 +63,7 @@ impl<T, R: Reclaimer, N: Unsigned + 'static> fmt::Pointer for Shared<'_, T, R, N
 
 /********** impl MarkedNonNullable ****************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> MarkedNonNullable for Shared<'_, T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> MarkedNonNullable for Shared<'_, T, R, N> {
     impl_marked_non_nullable!();
 }
 

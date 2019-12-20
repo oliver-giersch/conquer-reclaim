@@ -16,7 +16,7 @@ cfg_if::cfg_if! {
 }
 
 use crate::record::Record;
-use crate::traits::Reclaimer;
+use crate::traits::Reclaim;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Retired
@@ -29,7 +29,7 @@ pub struct Retired<R> {
 
 /********** impl inherent *************************************************************************/
 
-impl<R: Reclaimer + 'static> Retired<R> {
+impl<R: Reclaim + 'static> Retired<R> {
     /// Creates a new [`Retired`] record from a raw pointer.
     ///
     /// # Safety

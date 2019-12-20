@@ -9,7 +9,7 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
-    pub use crate::traits::{GlobalReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle};
+    pub use crate::traits::{GlobalReclaim, LocalRef, Protect, ProtectRegion, Reclaim};
 }
 
 #[macro_use]
@@ -35,9 +35,7 @@ pub use crate::atomic::{Atomic, CompareExchangeError};
 pub use crate::guarded::Guarded;
 pub use crate::record::Record;
 pub use crate::retired::{RawRetired, Retired};
-pub use crate::traits::{
-    GlobalReclaimer, OwningReclaimer, Protect, ProtectRegion, Reclaimer, ReclaimerHandle,
-};
+pub use crate::traits::{GlobalReclaim, LocalRef, Protect, ProtectRegion, Reclaim};
 
 use crate::typenum::Unsigned;
 
@@ -51,7 +49,7 @@ use crate::typenum::Unsigned;
 /// allocate the appropriate [`RecordHeader`][Reclaim::RecordHeader] type
 /// for its generic [`Reclaim`] parameter alongside their actual content.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub struct Owned<T, R: Reclaimer, N: Unsigned + 'static> {
+pub struct Owned<T, R: Reclaim, N: Unsigned + 'static> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(T, R)>,
 }

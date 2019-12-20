@@ -4,7 +4,7 @@ use conquer_pointer::MaybeNull;
 
 use crate::atomic::store::StoreArg;
 use crate::typenum::Unsigned;
-use crate::{Reclaimer, Shared, Unlinked, Unprotected};
+use crate::{Reclaim, Shared, Unlinked, Unprotected};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // CompareArg (trait)
@@ -56,35 +56,35 @@ macro_rules! impl_compare_arg_for_maybe_null {
 
 /********** Shared ********************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Shared<'_, T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Shared<'_, T, R, N> {
     impl_compare_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Option<Shared<'_, T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Option<Shared<'_, T, R, N>> {
     impl_compare_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for MaybeNull<Shared<'_, T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for MaybeNull<Shared<'_, T, R, N>> {
     impl_compare_arg_for_maybe_null!();
 }
 
 /********** Unlinked ******************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Unlinked<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Unlinked<T, R, N> {
     impl_compare_arg_for_type!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Option<Unlinked<T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Option<Unlinked<T, R, N>> {
     impl_compare_arg_for_option!();
 }
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for MaybeNull<Unlinked<T, R, N>> {
+impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for MaybeNull<Unlinked<T, R, N>> {
     impl_compare_arg_for_maybe_null!();
 }
 
 /********** Unprotected ***************************************************************************/
 
-impl<T, R: Reclaimer, N: Unsigned + 'static> CompareArg for Unprotected<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Unprotected<T, R, N> {
     type Unlinked = MaybeNull<Unlinked<Self::Item, Self::Reclaimer, Self::MarkBits>>;
 
     #[inline]
