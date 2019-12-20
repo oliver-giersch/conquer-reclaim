@@ -66,17 +66,17 @@ unsafe impl Reclaim for Leaking {
 #[derive(Copy, Clone, Default, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Handle;
 
-/********** impl ReclaimHandle ********************************************************************/
+/********** impl ReclaimerLocalRef ****************************************************************/
 
 unsafe impl ReclaimerLocalRef for Handle {
     type Guard = Guard;
     type Reclaimer = Leaking;
 
-    fn from_ref(global: &Self::Reclaimer) -> Self {
+    fn from_ref(_: &Self::Reclaimer) -> Self {
         Handle
     }
 
-    unsafe fn from_raw(global: *const Self::Reclaimer) -> Self {
+    unsafe fn from_raw(_: &Self::Reclaimer) -> Self {
         Handle
     }
 

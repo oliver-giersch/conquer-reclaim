@@ -44,7 +44,7 @@ pub unsafe trait ReclaimerLocalRef: Clone + Sized {
     type Reclaimer: Reclaim;
 
     fn from_ref(global: &Self::Reclaimer) -> Self;
-    unsafe fn from_raw(global: *const Self::Reclaimer) -> Self;
+    unsafe fn from_raw(global: &Self::Reclaimer) -> Self;
 
     fn into_guard(self) -> Self::Guard;
     unsafe fn retire(self, retired: Retired<Self::Reclaimer>);
