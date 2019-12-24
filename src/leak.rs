@@ -72,10 +72,7 @@ unsafe impl ReclaimRef for Handle {
     type Guard = Guard;
     type Reclaimer = Leaking;
 
-    fn from_ref<'global>(_: &'global Self::Reclaimer) -> Self
-    where
-        Self: 'global,
-    {
+    fn from_ref(_: &Self::Reclaimer) -> Self {
         Handle
     }
 

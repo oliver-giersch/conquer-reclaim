@@ -30,7 +30,7 @@ pub trait GlobalReclaim: Reclaim {
 pub unsafe trait Reclaim: Default + Sync + Sized + 'static {
     type Header: Default + Sync + Sized + 'static;
     type Ref: ReclaimRef<Reclaimer = Self>;
-    // type Ref<'global>: LocalRef<Reclaimer = Self> + 'global;
+    // type Ref<'global>: LocalRef<'global, Reclaimer = Self> + 'global;
 
     fn new() -> Self;
 }
@@ -43,9 +43,7 @@ pub unsafe trait ReclaimRef: Clone + Sized {
     type Guard: Protect<Reclaimer = Self::Reclaimer>;
     type Reclaimer: Reclaim;
 
-    fn from_ref<'global>(global: &'global Self::Reclaimer) -> Self
-    where
-        Self: 'global;
+    fn from_ref(global: &Self::Reclaimer) -> Self;
     unsafe fn from_raw(global: &Self::Reclaimer) -> Self;
 
     fn into_guard(self) -> Self::Guard;
