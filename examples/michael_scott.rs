@@ -3,7 +3,7 @@ use std::ptr;
 use std::sync::atomic::Ordering;
 
 use conquer_reclaim::conquer_pointer::MaybeNull::NotNull;
-use conquer_reclaim::{GlobalReclaim, Owned, Reclaim, ReclaimerLocalRef};
+use conquer_reclaim::{GlobalReclaim, Owned, Reclaim, ReclaimRef};
 use conquer_util::align::Aligned128 as CacheAligned;
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, conquer_reclaim::typenum::U0>;
