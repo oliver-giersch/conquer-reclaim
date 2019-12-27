@@ -94,7 +94,7 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Owned<T, R, N> {
         unsafe {
             let ptr = owned.inner.decompose_ptr();
             mem::forget(owned);
-            let boxed = Box::from_raw(Record::<_, R>::from_raw(ptr).as_ptr());
+            let boxed = Box::from_raw(Record::<_, R>::from_raw(ptr));
             (*boxed).elem
         }
     }
@@ -378,7 +378,7 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Drop for Owned<T, R, N> {
     fn drop(&mut self) {
         unsafe {
             let record = Record::<_, R>::from_raw(self.inner.decompose_ptr());
-            mem::drop(Box::from_raw(record.as_ptr()));
+            mem::drop(Box::from_raw(record));
         }
     }
 }

@@ -31,7 +31,7 @@ impl<T, R: Reclaim> Stack<T, R> {
 
     #[inline]
     pub fn handle(&self) -> StackHandle<T, R> {
-        StackHandle { stack: self, local_ref: R::Ref::from_ref(&self.reclaimer) }
+        StackHandle { stack: self, local_ref: unsafe { R::Ref::from_raw(&self.reclaimer) } }
     }
 
     #[inline]
@@ -49,7 +49,7 @@ impl<T, R: Reclaim> Stack<T, R> {
     }
 
     #[inline]
-    pub unsafe fn pop_unchecked(&self, handle: &R::Ref) -> Option<T> {
+    unsafe fn pop_unchecked(&self, handle: &R::Ref) -> Option<T> {
         let mut guard = handle.clone().into_guard();
         // (stack:2) this acquire load syncs-with the release CAS (stack:1)
         while let NotNull(head) = self.head.load(&mut guard, Ordering::Acquire) {
@@ -69,7 +69,7 @@ impl<T, R: Reclaim> Stack<T, R> {
 impl<T, R: GlobalReclaim> Stack<T, R> {
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.pop_unchecked(&R::build_local_ref()) }
+        unsafe { self.pop_unchecked(&R::build_global_ref()) }
     }
 }
 

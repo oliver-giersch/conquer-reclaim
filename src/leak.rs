@@ -9,7 +9,7 @@ use conquer_pointer::{
 };
 
 use crate::retired::Retired;
-use crate::traits::{GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimRef};
+use crate::traits::{BuildReclaimRef, GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimRef};
 use crate::typenum::Unsigned;
 use crate::NotEqualError;
 
@@ -41,7 +41,7 @@ pub struct Leaking;
 
 impl GlobalReclaim for Leaking {
     #[inline]
-    fn build_local_ref() -> Self::Ref {
+    fn build_global_ref() -> Self::Ref {
         Handle
     }
 }
@@ -66,15 +66,20 @@ unsafe impl Reclaim for Leaking {
 #[derive(Copy, Clone, Default, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Handle;
 
+/********** impl BuildReclaimRef ******************************************************************/
+
+impl<'a> BuildReclaimRef<'a> for Handle {
+    #[inline]
+    fn from_ref(global: &'a Self::Reclaimer) -> Self {
+        Self
+    }
+}
+
 /********** impl ReclaimRef ***********************************************************************/
 
 unsafe impl ReclaimRef for Handle {
     type Guard = Guard;
     type Reclaimer = Leaking;
-
-    fn from_ref(_: &Self::Reclaimer) -> Self {
-        Handle
-    }
 
     unsafe fn from_raw(_: &Self::Reclaimer) -> Self {
         Handle

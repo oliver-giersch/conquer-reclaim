@@ -41,16 +41,10 @@ impl<T, R: Reclaim> Queue<T, R> {
         self.head().load_raw(Ordering::Relaxed) == self.tail().load_raw(Ordering::Relaxed)
     }
 
-    /// Derives a [`ReclaimerHandle`] from the [`Queue`]'s internal [`Reclaimer`].
-    #[inline]
-    pub fn reclaimer_handle(&self) -> R::Ref {
-        R::Ref::from_ref(&self.reclaimer)
-    }
-
     /// Creates a new (thread-local) [`Handle`] for accessing the queue safely.
     #[inline]
     pub fn handle(&self) -> Handle<T, R> {
-        Handle { local_ref: R::Ref::from_ref(&self.reclaimer), queue: self }
+        Handle { local_ref: unsafe { R::Ref::from_raw(&self.reclaimer) }, queue: self }
     }
 
     /// Pushes `elem` to the tail of the [`Queue`] using `handle` to protect any memory records.
@@ -60,7 +54,7 @@ impl<T, R: Reclaim> Queue<T, R> {
     /// The caller has to ensure that `handle` has been derived from the same [`Queue`] it is used
     /// to access.
     #[inline]
-    pub unsafe fn push_unchecked(&self, elem: T, handle: &R::Ref) {
+    unsafe fn push_unchecked(&self, elem: T, handle: &R::Ref) {
         let mut node = Owned::leak_unprotected(Owned::new(Node::new(elem)));
         let mut guard = handle.clone().into_guard();
         loop {
@@ -89,7 +83,7 @@ impl<T, R: Reclaim> Queue<T, R> {
     /// The caller has to ensure that `handle` has been derived from the same [`Queue`] it is used
     /// to access.
     #[inline]
-    pub unsafe fn pop_unchecked(&self, handle: &R::Ref) -> Option<T> {
+    unsafe fn pop_unchecked(&self, handle: &R::Ref) -> Option<T> {
         let mut head_guard = handle.clone().into_guard();
         let mut next_guard = handle.clone().into_guard();
 
@@ -123,13 +117,13 @@ impl<T, R: GlobalReclaim> Queue<T, R> {
     /// Pushes `elem` to the end of the [`Queue`].
     #[inline]
     pub fn push(&self, elem: T) {
-        unsafe { self.push_unchecked(elem, &R::build_local_ref()) }
+        unsafe { self.push_unchecked(elem, &R::build_global_ref()) }
     }
 
     /// Pops an element from the head of the [`Queue`] or returns [`None`] if it is empty.
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.pop_unchecked(&R::build_local_ref()) }
+        unsafe { self.pop_unchecked(&R::build_global_ref()) }
     }
 }
 

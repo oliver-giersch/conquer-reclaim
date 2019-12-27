@@ -1,8 +1,6 @@
 use core::mem;
 use core::ptr::NonNull;
 
-use memoffset::offset_of;
-
 use crate::traits::Reclaim;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -19,6 +17,7 @@ use crate::traits::Reclaim;
 /// using a given memory reclamation scheme and should only be accessed by the
 /// reclamation scheme itself.
 #[derive(Debug, Default, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(C)]
 pub struct Record<T, R: Reclaim> {
     /// The record's header
     pub(crate) header: R::Header,
@@ -29,13 +28,13 @@ pub struct Record<T, R: Reclaim> {
 /********** impl inherent *************************************************************************/
 
 impl<T, R: Reclaim> Record<T, R> {
-    /// Creates a new record with the specified `elem` and a default header.
+    /// Creates a new [`Record`] with the specified `elem` and a default header.
     #[inline]
     pub fn new(elem: T) -> Self {
         Self { header: Default::default(), elem }
     }
 
-    /// Creates a new record with the specified `elem` and `header`.
+    /// Creates a new [`Record`] with the specified `elem` and `header`.
     #[inline]
     pub fn with_header(elem: T, header: R::Header) -> Self {
         Self { header, elem }
@@ -54,6 +53,20 @@ impl<T, R: Reclaim> Record<T, R> {
     }
 
     /// Calculates the address of the [`Record`] for the given pointer to a
+    /// wrapped `elem` and returns the resulting pointer.
+    ///
+    /// # Safety
+    ///
+    /// The `elem` pointer must be a valid pointer to an instance of `T` that
+    /// was constructed as part of a [`Record`]. Otherwise, the pointer
+    /// arithmetic used to determine the address will result in a pointer to
+    /// unrelated memory, which is likely to lead to undefined behaviour.
+    #[inline]
+    pub unsafe fn from_raw(elem: *mut T) -> *mut Self {
+        ((elem as usize) - Self::offset_elem()) as *mut _
+    }
+
+    /// Calculates the address of the [`Record`] for the given pointer to a
     /// wrapped non-nullable `elem` and returns the resulting pointer.
     ///
     /// # Safety
@@ -64,22 +77,17 @@ impl<T, R: Reclaim> Record<T, R> {
     /// unrelated memory, which is likely to lead to undefined behaviour.
     #[inline]
     pub unsafe fn from_raw_non_null(elem: NonNull<T>) -> NonNull<Self> {
-        Self::from_raw(elem.as_ptr())
+        NonNull::new_unchecked(Self::from_raw(elem.as_ptr()))
     }
 
-    /// Calculates the address of the [`Record`] for the given pointer to a
-    /// wrapped `elem` and returns the resulting pointer.
-    ///
-    /// # Safety
-    ///
-    /// The `elem` pointer must be a valid pointer to an instance of `T` that
-    /// was constructed as part of a [`Record`]. Otherwise, the pointer
-    /// arithmetic used to determine the address will result in a pointer to
-    /// unrelated memory, which is likely to lead to undefined behaviour.
     #[inline]
-    pub unsafe fn from_raw(elem: *mut T) -> NonNull<Self> {
-        let addr = (elem as usize) - Self::offset_elem();
-        NonNull::new_unchecked(addr as *mut _)
+    pub unsafe fn from_header(header: *mut R::Header) -> *mut Self {
+        header as _
+    }
+
+    #[inline]
+    pub unsafe fn from_header_non_null(header: NonNull<R::Header>) -> NonNull<Self> {
+        header.cast()
     }
 
     /// Returns a reference to the header for the record at the pointed-to
@@ -92,9 +100,8 @@ impl<T, R: Reclaim> Record<T, R> {
     /// Otherwise, the pointer arithmetic used to calculate the header's address
     /// will be incorrect and lead to undefined behavior.
     #[inline]
-    pub unsafe fn header_from_raw<'a>(elem: *mut T) -> &'a R::Header {
-        let header = (elem as usize) - Self::offset_elem() + Self::offset_header();
-        &*(header as *mut _)
+    pub unsafe fn header_from_raw(elem: *mut T) -> *mut R::Header {
+        ((elem as usize) - Self::offset_elem()) as *mut _
     }
 
     /// Returns a reference to the header for the record at the pointed-to
@@ -107,36 +114,17 @@ impl<T, R: Reclaim> Record<T, R> {
     /// Otherwise, the pointer arithmetic used to calculate the header's address
     /// will be incorrect and lead to undefined behavior.
     #[inline]
-    pub unsafe fn header_from_raw_non_null<'a>(elem: NonNull<T>) -> &'a R::Header {
-        let header = (elem.as_ptr() as usize) - Self::offset_elem() + Self::offset_header();
-        &*(header as *mut _)
-    }
-
-    /// Returns the offset in bytes from the address of a record to its header
-    /// field.
-    #[inline]
-    pub fn offset_header() -> usize {
-        if mem::size_of::<R::Header>() == 0 {
-            0
-        } else {
-            // FIXME:
-            //  the offset_of! macro is unsound, replace once a sound alternative becomes available
-            //  https://internals.rust-lang.org/t/pre-rfc-add-a-new-offset-of-macro-to-core-mem/9273
-            offset_of!(Self, header)
-        }
+    pub unsafe fn header_from_raw_non_null(elem: NonNull<T>) -> NonNull<R::Header> {
+        NonNull::new_unchecked(((elem.as_ptr() as usize) - Self::offset_elem()) as *mut _)
     }
 
     /// Returns the offset in bytes from the address of a record to its element
     /// field.
     #[inline]
     pub fn offset_elem() -> usize {
-        if mem::size_of::<R::Header>() == 0 {
-            0
-        } else {
-            // FIXME:
-            //  the offset_of! macro is unsound, replace once a sound alternative becomes available
-            //  https://internals.rust-lang.org/t/pre-rfc-add-a-new-offset-of-macro-to-core-mem/9273
-            offset_of!(Self, elem)
-        }
+        let header_size = mem::size_of::<R::Header>();
+        let elem_align = mem::align_of::<T>();
+
+        header_size + (header_size.wrapping_neg() & (elem_align - 1))
     }
 }

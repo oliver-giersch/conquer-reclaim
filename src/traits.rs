@@ -12,14 +12,14 @@ use crate::{NotEqualError, Shared};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub trait GlobalReclaim: Reclaim {
-    fn build_local_ref() -> Self::Ref;
+    fn build_global_ref() -> Self::Ref;
 
     fn build_guard() -> <Self::Ref as ReclaimRef>::Guard {
-        Self::build_local_ref().into_guard()
+        Self::build_global_ref().into_guard()
     }
 
     unsafe fn retire(retired: Retired<Self>) {
-        Self::build_local_ref().retire(retired);
+        Self::build_global_ref().retire(retired);
     }
 }
 
@@ -29,8 +29,8 @@ pub trait GlobalReclaim: Reclaim {
 
 pub unsafe trait Reclaim: Default + Sync + Sized + 'static {
     type Header: Default + Sync + Sized + 'static;
-    type Ref: ReclaimRef<Reclaimer = Self>;
-    // type Ref<'global>: LocalRef<'global, Reclaimer = Self> + 'global;
+    type Ref: ReclaimRef<Reclaimer = Self> + BuildReclaimRef<'static>;
+    // type Ref<'global>: ReclaimRef<Reclaimer = Self> + BuildReclaimRef<'a>;
 
     fn new() -> Self;
 }
@@ -43,11 +43,28 @@ pub unsafe trait ReclaimRef: Clone + Sized {
     type Guard: Protect<Reclaimer = Self::Reclaimer>;
     type Reclaimer: Reclaim;
 
-    fn from_ref(global: &Self::Reclaimer) -> Self;
-    unsafe fn from_raw(global: &Self::Reclaimer) -> Self;
+    fn from_ref<'global>(global: &'global Self::Reclaimer) -> Self
+    where
+        Self: BuildReclaimRef<'global>,
+    {
+        <Self as BuildReclaimRef<'_>>::from_ref(global)
+    }
+
+    /// Creates a new [`ReclaimRef`] from a raw pointer to the ...
+    unsafe fn from_raw(global: &Self::Reclaimer) -> Self
+    where
+        Self: 'static;
 
     fn into_guard(self) -> Self::Guard;
     unsafe fn retire(self, retired: Retired<Self::Reclaimer>);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// BuildReclaimRef (trait)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub trait BuildReclaimRef<'global>: ReclaimRef + 'global {
+    fn from_ref(global: &'global Self::Reclaimer) -> Self;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
