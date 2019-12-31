@@ -1,12 +1,81 @@
 use std::mem::ManuallyDrop;
 use std::ptr;
-use std::sync::atomic::Ordering;
+use std::sync::{atomic::Ordering, Arc};
 
 use conquer_reclaim::conquer_pointer::MaybeNull::NotNull;
 use conquer_reclaim::typenum::U0;
 use conquer_reclaim::{GlobalReclaim, Owned, Reclaim, ReclaimRef};
 
 type Atomic<T, R> = conquer_reclaim::Atomic<T, R, U0>;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// ArcStack
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct ArcStack<T, R: Reclaim> {
+    inner: Arc<Stack<T, R>>,
+    local_ref: ManuallyDrop<R::Ref>,
+}
+
+/********** impl Send *****************************************************************************/
+
+unsafe impl<T, R: Reclaim> Send for ArcStack<T, R> {}
+
+/********** impl Clone ****************************************************************************/
+
+impl<T, R: Reclaim> Clone for ArcStack<T, R> {
+    #[inline]
+    fn clone(&self) -> Self {
+        let inner = Arc::clone(&self.inner);
+        let local_ref = unsafe { R::Ref::from_raw(&self.inner.reclaimer) };
+        Self { inner, local_ref: ManuallyDrop::new(local_ref) }
+    }
+}
+
+/********** impl inherent *************************************************************************/
+
+impl<T, R: Reclaim> ArcStack<T, R> {
+    #[inline]
+    pub fn new() -> Self {
+        let inner = Arc::new(Stack::new());
+        let local_ref = unsafe { R::Ref::from_raw(&inner.reclaimer) };
+        Self { inner, local_ref: ManuallyDrop::new(local_ref) }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    #[inline]
+    pub fn push(&self, elem: T) {
+        self.inner.push(elem);
+    }
+
+    #[inline]
+    pub fn pop(&self) -> Option<T> {
+        unsafe { self.inner.pop_unchecked(&self.local_ref) }
+    }
+}
+
+/********** impl Default **************************************************************************/
+
+impl<T, R: Reclaim> Default for ArcStack<T, R> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/********** impl Drop *****************************************************************************/
+
+impl<T, R: Reclaim> Drop for ArcStack<T, R> {
+    #[inline]
+    fn drop(&mut self) {
+        // this guarantees that the local ref is dropped before "global" state
+        unsafe { ManuallyDrop::drop(&mut self.local_ref) };
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Stack
@@ -27,6 +96,11 @@ impl<T, R: Reclaim> Stack<T, R> {
     #[inline]
     pub fn new() -> Self {
         Self { head: Atomic::null(), reclaimer: R::new() }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.head.load_unprotected(Ordering::Relaxed).is_null()
     }
 
     #[inline]

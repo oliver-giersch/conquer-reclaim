@@ -9,6 +9,8 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
+    pub use conquer_pointer::MaybeNull::{self, NotNull, Null};
+
     pub use crate::traits::{
         BuildReclaimRef, GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimRef,
     };
@@ -47,11 +49,13 @@ use crate::typenum::Unsigned;
 // Owned (impl in imp/owned.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A pointer type for heap allocated values similar to [`Box`].
+/// A safe smart pointer type for heap allocated values similar to [`Box`].
 ///
-/// `Owned` values function like marked pointers and are also guaranteed to
-/// allocate the appropriate [`RecordHeader`][Reclaim::RecordHeader] type
-/// for its generic [`Reclaim`] parameter alongside their actual content.
+/// Unlike [`Box`], `Owned` instances support pointer tagging and are tightly
+/// bound to their associated [`Reclaim`] type.
+/// Specifically, on creation they invariably allocate the associated
+/// [`Header`][Reclaim::Header] alongside the actual value (see also
+/// [`Record`]).
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub struct Owned<T, R: Reclaim, N: Unsigned + 'static> {
     inner: MarkedNonNull<T, N>,
@@ -62,15 +66,15 @@ pub struct Owned<T, R: Reclaim, N: Unsigned + 'static> {
 // Shared (impl in imp/shared.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A shared reference to a value that is actively protected from reclamation by
-/// other threads.
+/// A local shared reference to a protected value that supports pointer tagging.
 ///
-/// `Shared` values have similar semantics to shared references (`&'g T`), i.e.
-/// they can be trivially copied, cloned and (safely) de-referenced.
-/// However, they do retain potential mark bits of the atomic value from which
-/// they were originally read.
-/// They are also usually borrowed from guard values implementing the
-/// [`Protect`] trait.
+/// Instances of `Shared` are derived from guard types (see [`Protect`] and
+/// [`ProtectRegion`]) from which they inherit their lifetime dependence.
+/// Like regular shared references (`&'g T`) they can be trivially copied,
+/// cloned, de-referenced and can not be `null`.
+///
+/// See the documentation for [`deref`][Shared::deref] for an explanation of the
+/// safety concerns involved in de-referencing a `Shared`.
 pub struct Shared<'g, T, R, N> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(&'g T, R)>,
@@ -80,18 +84,19 @@ pub struct Shared<'g, T, R, N> {
 // Unlinked (impl in imp/unlinked.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A reference to a value that has been removed from its previous location in
-/// memory and is hence no longer reachable by other threads.
+/// A reference type for a value that has been removed from its previous
+/// location as the result of a [`swap`][swap] or [`compare_exchange`][cex]
+/// operation on an [`Atomic`].
 ///
-/// `Unlinked` values are the result of (successful) atomic *swap* or
-/// *compare-and-swap* operations on [`Atomic`] values.
-/// They are move-only types, but they don't have full ownership semantics,
-/// either.
-/// Dropping an `Unlinked` value without explicitly retiring it almost certainly
-/// results in a memory leak.
+/// Under the assumption that no other thread is able to load a *new* reference
+/// to the same value as the `Unlinked` after it being unlinked, it is sound to
+/// [`retire`][Unlinked::retire] the value, which hands it over to the
+/// [`Reclaim`] mechanism for eventual de-allocation.
+/// This is for instance always the case if the [`Atomic`] was a unique pointer
+/// to the unlinked value.
 ///
-/// The safety invariants around retiring `Unlinked` references are explained
-/// in detail in the documentation for [`retire_local`][Reclaim::retire_local].
+/// [swap]: Atomic::swap
+/// [cex]: Atomic::compare_exchange
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 #[must_use = "unlinked values are meant to be retired, otherwise a memory leak is highly likely"]
 pub struct Unlinked<T, R, N> {
@@ -103,14 +108,15 @@ pub struct Unlinked<T, R, N> {
 // Unprotected (impl in imp/unprotected.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A reference to a value loaded from an [`Atomic`] that is not actively
-/// protected from reclamation.
+/// A marked pointer to a value loaded from an [`Atomic`] that is not protected
+/// from reclamation and can hence not be safely de-referenced in general.
 ///
-/// `Unprotected` values can not be safely de-referenced under usual
-/// circumstances (i.e. other threads can retire and reclaim unlinked records).
-/// They do, however, have stronger guarantees than raw (marked) pointers:
-/// Since are loaded from [`Atomic`] values they must (at least at one point)
-/// have been *valid* references.
+/// This type does have slightly stronger guarantees than a raw
+/// [`MarkedPtr`][conquer_pointer::MarkedPtr], however, in that it must be
+/// loaded from an [`Atomic`].
+/// Consequently, as long as it is non-`null` and created by safe means, an
+/// `Unprotected` is guaranteed to point at an (at least) once valid instance of
+/// type `T`.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub struct Unprotected<T, R, N> {
     inner: MarkedPtr<T, N>,
@@ -121,13 +127,21 @@ pub struct Unprotected<T, R, N> {
 // NotEqualError
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// TODO: Docs...
+/// An error type for indicating that a [`load_if_equal`][Atomic::load_if_equal]
+/// operation failed because the loaded value did not match the expected one.
 #[derive(Debug, Default, Copy, Clone, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct NotEqualError;
 
 /********** public functions **********************************************************************/
 
-/// TODO: Docs...
+/// Returns a `null` pointer for an arbitrary type, [`Reclaim`] mechanism and
+/// number of tag bits.
+///
+/// This function represents an ergonomic and handy way to generate a `null`
+/// argument for eg. a [`store`][store] or [`compare_exchange`][cex] operation.
+///
+/// [store]: Atomic::store
+/// [cex]: Atomic::compare_exchange
 #[inline(always)]
 pub const fn null<T, R, N>() -> Unprotected<T, R, N> {
     Unprotected::null()
