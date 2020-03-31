@@ -3,15 +3,12 @@
 use core::marker::PhantomData;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{
-    MarkedPtr,
-    MaybeNull::{self, NotNull, Null},
-};
+use conquer_pointer::MarkedPtr;
 
 use crate::retired::Retired;
-use crate::traits::{BuildReclaimRef, GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimRef};
+use crate::traits::{GlobalReclaim, LocalState, Protect, Reclaim};
 use crate::typenum::Unsigned;
-use crate::NotEqualError;
+use crate::NotEqual;
 
 /// A specialization of the [`Atomic`](crate::atomic::Atomic) type using
 /// [`Leaking`] as reclaimer.
@@ -19,6 +16,7 @@ pub type Atomic<T, N> = crate::atomic::Atomic<T, Leaking, N>;
 /// A specialization of the [`Owned`](crate::Owned) type using [`Leaking`] as
 /// reclaimer.
 pub type Owned<T, N> = crate::Owned<T, Leaking, N>;
+pub type Protected<'g, T, N> = crate::Protected<'g, T, Leaking, N>;
 /// A specialization of the [`Shared`](crate::Shared) type using [`Leaking`] as
 /// reclaimer.
 pub type Shared<'g, T, N> = crate::Shared<'g, T, Leaking, N>;
@@ -39,100 +37,104 @@ pub struct Leaking;
 
 /********** impl GlobalReclaim ********************************************************************/
 
-impl GlobalReclaim for Leaking {
+unsafe impl GlobalReclaim for Leaking {
     #[inline]
-    fn build_global_ref() -> Self::Ref {
-        Handle
+    fn build_local_state() -> Self::LocalState {
+        LeakingLocalState
     }
 }
 
-/********** impl Reclaimer ************************************************************************/
+/********** impl Reclaim **************************************************************************/
 
-unsafe impl Reclaim for Leaking {
-    type Header = ();
-    type Ref = Handle;
-
-    #[inline]
-    fn new() -> Self {
-        Leaking
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Handle
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// TODO: docs...
-#[derive(Copy, Clone, Default, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Handle;
-
-/********** impl BuildReclaimRef ******************************************************************/
-
-impl<'a> BuildReclaimRef<'a> for Handle {
-    #[inline]
-    fn from_ref(global: &'a Self::Reclaimer) -> Self {
-        Self
-    }
-}
-
-/********** impl ReclaimRef ***********************************************************************/
-
-unsafe impl ReclaimRef for Handle {
+impl Reclaim for Leaking {
     type Guard = Guard;
+    type Header = ();
+    type LocalState = LeakingLocalState;
+
+    #[inline]
+    unsafe fn build_local_state(&self) -> Self::LocalState {
+        LeakingLocalState
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// LeakingLocalState
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LeakingLocalState;
+
+/********** impl LocalState ***********************************************************************/
+
+unsafe impl LocalState for LeakingLocalState {
     type Reclaimer = Leaking;
 
-    unsafe fn from_raw(_: &Self::Reclaimer) -> Self {
-        Handle
-    }
-
-    fn into_guard(self) -> Self::Guard {
+    #[inline]
+    fn build_guard(&self) -> <Self::Reclaimer as Reclaim>::Guard {
         Guard
     }
 
     #[inline]
-    unsafe fn retire(self, _: Retired<Self::Reclaimer>) {}
+    unsafe fn retire_record(&self, _: Retired<Self::Reclaimer>) {}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Guard
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// TODO: docs...
-#[derive(Debug, Default, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct Guard;
 
-/********** impl Protect **************************************************************************/
+/********** impl Protect (Guard) ******************************************************************/
 
 unsafe impl Protect for Guard {
     type Reclaimer = Leaking;
 
     #[inline]
-    fn release(&mut self) {}
-
-    #[inline]
-    fn protect<T, N: Unsigned + 'static>(
+    fn protect<T, N: Unsigned>(
         &mut self,
         atomic: &Atomic<T, N>,
         order: Ordering,
-    ) -> MaybeNull<Shared<T, N>> {
-        MaybeNull::from(atomic.load_raw(order))
-            .map(|ptr| Shared { inner: ptr, _marker: PhantomData })
+    ) -> Protected<T, N> {
+        Protected { inner: atomic.load_raw(order), _marker: PhantomData }
     }
 
     #[inline]
-    fn protect_if_equal<T, N: Unsigned + 'static>(
+    fn protect_if_equal<T, N: Unsigned>(
         &mut self,
         atomic: &Atomic<T, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<MaybeNull<Shared<T, N>>, NotEqualError> {
-        atomic.load_raw_if_equal(expected, order).map(|ptr| match ptr {
-            NotNull(inner) => NotNull(Shared { inner, _marker: PhantomData }),
-            Null(tag) => Null(tag),
-        })
+    ) -> Result<Protected<T, N>, NotEqual> {
+        atomic
+            .load_raw_if_equal(expected, order)
+            .map(|inner| Protected { inner, _marker: PhantomData })
     }
 }
 
-/********** impl ProtectRegion ********************************************************************/
+/********** impl Protect (&Guard) *****************************************************************/
 
-unsafe impl ProtectRegion for Guard {}
+unsafe impl Protect for &Guard {
+    type Reclaimer = Leaking;
+
+    #[inline]
+    fn protect<T, N: Unsigned>(
+        &mut self,
+        atomic: &Atomic<T, N>,
+        order: Ordering,
+    ) -> Protected<T, N> {
+        Protected { inner: atomic.load_raw(order), _marker: PhantomData }
+    }
+
+    #[inline]
+    fn protect_if_equal<T, N: Unsigned>(
+        &mut self,
+        atomic: &Atomic<T, N>,
+        expected: MarkedPtr<T, N>,
+        order: Ordering,
+    ) -> Result<Protected<T, N>, NotEqual> {
+        atomic
+            .load_raw_if_equal(expected, order)
+            .map(|inner| Protected { inner, _marker: PhantomData })
+    }
+}

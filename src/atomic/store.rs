@@ -1,114 +1,79 @@
-use conquer_pointer::{MarkedPtr, MaybeNull};
+use core::fmt;
+use core::marker::PhantomData;
+use core::mem;
+
+use conquer_pointer::MarkedPtr;
 
 use crate::traits::Reclaim;
 use crate::typenum::Unsigned;
-use crate::{Owned, Shared, Unlinked, Unprotected};
+use crate::{Owned, Shared};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// StoreArg (trait)
+// Storable
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A trait for abstracting over various possible argument types for store or
-/// swap operations.
-pub trait StoreArg {
-    type Item: Sized;
-    type Reclaimer: Reclaim;
-    type MarkBits: Unsigned;
-
-    fn as_marked_ptr(&self) -> MarkedPtr<Self::Item, Self::MarkBits>;
+pub struct Storable<T, R, N> {
+    inner: MarkedPtr<T, N>,
+    _marker: PhantomData<R>,
 }
 
-/************ impl macros *************************************************************************/
+/********** impl Clone ****************************************************************************/
 
-/// Implements `StoreArg` for an unwrapped type.
-macro_rules! impl_store_arg_for_type {
-    () => {
-        type Item = T;
-        type Reclaimer = R;
-        type MarkBits = N;
-
-        #[inline]
-        fn as_marked_ptr(&self) -> MarkedPtr<Self::Item, Self::MarkBits> {
-            self.inner.into()
-        }
-    };
+impl<T, R, N> Clone for Storable<T, R, N> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self { inner: self.inner, _marker: PhantomData }
+    }
 }
 
-/// Implements `StoreArg` for `Option<_>`.
-macro_rules! impl_store_arg_for_option {
-    () => {
-        type Item = T;
-        type Reclaimer = R;
-        type MarkBits = N;
+/********** impl Copy *****************************************************************************/
 
-        #[inline]
-        fn as_marked_ptr(&self) -> MarkedPtr<Self::Item, Self::MarkBits> {
-            match self {
-                Some(ref ptr) => ptr.as_marked_ptr(),
-                None => MarkedPtr::null(),
-            }
-        }
-    };
+impl<T, R, N> Copy for Storable<T, R, N> {}
+
+/********** impl inherent *************************************************************************/
+
+impl<T, R, N> Storable<T, R, N> {
+    /// Creates a new `null` pointer.
+    #[inline]
+    pub const fn null() -> Self {
+        Self::new(MarkedPtr::null())
+    }
+
+    /// Returns the inner raw [`MarkedPtr`].
+    #[inline]
+    pub const fn into_marked_ptr(self) -> MarkedPtr<T, N> {
+        self.inner
+    }
+
+    /// Creates a new `Storable`.
+    #[inline]
+    pub(crate) const fn new(inner: MarkedPtr<T, N>) -> Self {
+        Self { inner, _marker: PhantomData }
+    }
 }
 
-/// Implements `StoreArg` for `MaybeNull<_>`.
-macro_rules! impl_store_arg_for_maybe_null {
-    () => {
-        type Item = T;
-        type Reclaimer = R;
-        type MarkBits = N;
+/********** impl Debug ****************************************************************************/
 
-        #[inline]
-        fn as_marked_ptr(&self) -> MarkedPtr<Self::Item, Self::MarkBits> {
-            self.as_marked_ptr()
-        }
-    };
+impl<T, R, N: Unsigned> fmt::Debug for Storable<T, R, N> {
+    impl_fmt_debug!(Storable);
 }
 
-/********** Owned *********************************************************************************/
+/********** impl From (Owned) *********************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Owned<T, R, N> {
-    impl_store_arg_for_type!();
+impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Storable<T, R, N> {
+    #[inline]
+    fn from(owned: Owned<T, R, N>) -> Self {
+        let storable = Self { inner: owned.inner.into(), _marker: PhantomData };
+        mem::forget(owned);
+        storable
+    }
 }
 
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Option<Owned<T, R, N>> {
-    impl_store_arg_for_option!();
-}
+/********** impl From (Shared) ********************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for MaybeNull<Owned<T, R, N>> {
-    impl_store_arg_for_maybe_null!();
-}
-
-/********** Shared ********************************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Shared<'_, T, R, N> {
-    impl_store_arg_for_type!();
-}
-
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Option<Shared<'_, T, R, N>> {
-    impl_store_arg_for_option!();
-}
-
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for MaybeNull<Shared<'_, T, R, N>> {
-    impl_store_arg_for_maybe_null!();
-}
-
-/********** Unlinked ******************************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Unlinked<T, R, N> {
-    impl_store_arg_for_type!();
-}
-
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Option<Unlinked<T, R, N>> {
-    impl_store_arg_for_option!();
-}
-
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for MaybeNull<Unlinked<T, R, N>> {
-    impl_store_arg_for_maybe_null!();
-}
-
-/********** Unprotected ***************************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> StoreArg for Unprotected<T, R, N> {
-    impl_store_arg_for_type!();
+impl<T, R, N> From<Shared<'_, T, R, N>> for Storable<T, R, N> {
+    #[inline]
+    fn from(shared: Shared<'_, T, R, N>) -> Self {
+        Self { inner: shared.inner.into_marked_ptr(), _marker: PhantomData }
+    }
 }

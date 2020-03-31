@@ -9,8 +9,6 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
-    pub use conquer_pointer::MaybeNull::{self, NotNull, Null};
-
     pub use crate::traits::{
         BuildReclaimRef, GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimRef,
     };
@@ -19,6 +17,8 @@ pub mod prelude {
 #[macro_use]
 mod macros;
 
+#[cfg(feature = "examples")]
+pub mod examples;
 pub mod leak;
 
 mod atomic;
@@ -30,36 +30,60 @@ mod traits;
 
 use core::marker::PhantomData;
 
+// public re-exports
 pub use conquer_pointer;
 pub use conquer_pointer::typenum;
 
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
-pub use crate::atomic::{Atomic, CompareExchangeError};
+pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
 pub use crate::guarded::Guarded;
 pub use crate::record::Record;
-pub use crate::retired::{RawRetired, Retired};
-pub use crate::traits::{
-    BuildReclaimRef, GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimRef,
-};
+pub use crate::retired::{Retired, RetiredPtr};
+pub use crate::traits::{GlobalReclaim, LocalState, Protect, Reclaim};
 
 use crate::typenum::Unsigned;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Maybe
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// An [`Option`]-like wrapper for non-nullable marked pointer or
+/// reference types that can also represent marked `null` pointers.
+#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
+pub enum Maybe<P> {
+    Some(P),
+    Null(usize),
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Owned (impl in imp/owned.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A safe smart pointer type for heap allocated values similar to [`Box`].
+/// A smart pointer type for heap allocation similar to
+/// [`Box`][alloc::boxed::Box].
 ///
-/// Unlike [`Box`], `Owned` instances support pointer tagging and are tightly
-/// bound to their associated [`Reclaim`] type.
-/// Specifically, on creation they invariably allocate the associated
-/// [`Header`][Reclaim::Header] alongside the actual value (see also
-/// [`Record`]).
+/// Unlike [`Box`], the `Owned` type supports pointer tagging and is bound to
+/// its associated [`Reclaim`] type.
+/// The type guarantees that, on allocation, the instance of `T` will be
+/// preceded by a [`Default`] initialized instance of the associated
+/// [`Header`][Reclaim::Header] type.
+///
+/// When an [`Owned`] instance goes out scope, the entire [`Record`] will be
+/// de-allocated.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub struct Owned<T, R: Reclaim, N: Unsigned + 'static> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(T, R)>,
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Protected (impl in imp/protected.rs)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct Protected<'g, T, R, N> {
+    inner: MarkedPtr<T, N>,
+    _marker: PhantomData<(Option<&'g T>, R)>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -124,25 +148,10 @@ pub struct Unprotected<T, R, N> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// NotEqualError
+// NotEqual
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// An error type for indicating that a [`load_if_equal`][Atomic::load_if_equal]
-/// operation failed because the loaded value did not match the expected one.
+/// A type for indicating that a [`load_if_equal`][Atomic::load_if_equal]
+/// operation failed due to the loaded value not matching the expected one.
 #[derive(Debug, Default, Copy, Clone, Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub struct NotEqualError;
-
-/********** public functions **********************************************************************/
-
-/// Returns a `null` pointer for an arbitrary type, [`Reclaim`] mechanism and
-/// number of tag bits.
-///
-/// This function represents an ergonomic and handy way to generate a `null`
-/// argument for eg. a [`store`][store] or [`compare_exchange`][cex] operation.
-///
-/// [store]: Atomic::store
-/// [cex]: Atomic::compare_exchange
-#[inline(always)]
-pub const fn null<T, R, N>() -> Unprotected<T, R, N> {
-    Unprotected::null()
-}
+pub struct NotEqual;

@@ -1,5 +1,5 @@
 use core::borrow::{Borrow, BorrowMut};
-use core::convert::{AsMut, AsRef, TryFrom};
+use core::convert::{AsMut, AsRef};
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
@@ -13,17 +13,17 @@ cfg_if::cfg_if! {
         use alloc::boxed::Box;
     }
 }
-use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable, NullError};
+use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
-use crate::atomic::Atomic;
+use crate::atomic::Storable;
 use crate::record::Record;
 use crate::traits::Reclaim;
 use crate::typenum::Unsigned;
-use crate::{Owned, Shared, Unprotected};
+use crate::Owned;
 
 /********** impl Clone ****************************************************************************/
 
-impl<T: Clone, R: Reclaim, N: Unsigned + 'static> Clone for Owned<T, R, N> {
+impl<T: Clone, R: Reclaim, N: Unsigned> Clone for Owned<T, R, N> {
     #[inline]
     fn clone(&self) -> Self {
         let (reference, tag) = unsafe { self.inner.decompose_ref() };
@@ -38,14 +38,13 @@ unsafe impl<T, R: Reclaim, N: Unsigned + 'static> Sync for Owned<T, R, N> where 
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned + 'static> Owned<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
     /// Creates a new heap-allocated [`Record<T>`](Record) and returns an owning
     /// handle to it.
     #[inline]
     pub fn new(owned: T) -> Self {
-        let record = Self::alloc_record(owned);
         Self {
-            inner: unsafe { MarkedNonNull::from_non_null_unchecked(record) },
+            inner: unsafe { MarkedNonNull::compose_unchecked(Self::alloc_record(owned), 0) },
             _marker: PhantomData,
         }
     }
@@ -91,12 +90,8 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Owned<T, R, N> {
     #[inline]
     #[allow(clippy::wrong_self_convention)]
     pub fn into_inner(owned: Self) -> T {
-        unsafe {
-            let ptr = owned.inner.decompose_ptr();
-            mem::forget(owned);
-            let boxed = Box::from_raw(Record::<_, R>::from_raw(ptr));
-            (*boxed).elem
-        }
+        let boxed: Box<Record<_, _>> = owned.into();
+        (*boxed).data
     }
 
     #[inline]
@@ -135,24 +130,8 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Owned<T, R, N> {
     }
 
     #[inline]
-    pub fn split_tag(owned: Self) -> (Self, usize) {
-        let (inner, tag) = owned.inner.split_tag();
-        mem::forget(owned);
-
-        (Self { inner, _marker: PhantomData }, tag)
-    }
-
-    #[inline]
     pub fn set_tag(owned: Self, tag: usize) -> Self {
         let inner = owned.inner.set_tag(tag);
-        mem::forget(owned);
-
-        Self { inner, _marker: PhantomData }
-    }
-
-    #[inline]
-    pub fn update_tag(owned: Self, func: impl FnOnce(usize) -> usize) -> Self {
-        let inner = owned.inner.update_tag(func);
         mem::forget(owned);
 
         Self { inner, _marker: PhantomData }
@@ -212,67 +191,8 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Owned<T, R, N> {
     }
 
     #[inline]
-    pub fn leak_unprotected(owned: Self) -> Unprotected<T, R, N> {
-        let inner = owned.inner.into_marked_ptr();
-        mem::forget(owned);
-
-        Unprotected { inner, _marker: PhantomData }
-    }
-
-    /// Leaks the `owned` value and turns it into a "protected" [`Shared`][shared]
-    /// value with arbitrary lifetime `'a`.
-    ///
-    /// Note, that the protection of the [`Shared`][shared] value in this case
-    /// stems from the fact, that the given `owned` could not have previously
-    /// been part of a concurrent data structure (barring unsafe construction).
-    /// This rules out concurrent reclamation by other threads.
-    ///
-    /// # Safety
-    ///
-    /// Once a leaked [`Shared`][shared] has been successfully inserted into a
-    /// concurrent data structure, it must not be accessed any more, if there is
-    /// the possibility for concurrent reclamation of the record.
-    ///
-    /// [shared]: crate::Shared
-    ///
-    /// # Example
-    ///
-    /// The use case for this method is similar to [`leak_unprotected`][Owned::leak_unprotected]
-    /// but the leaked value can be safely dereferenced **before** being
-    /// inserted into a shared data structure.
-    ///
-    /// ```
-    /// use core::sync::atomic::Ordering::Relaxed;
-    ///
-    /// use conquer_reclaim::typenum::U0;
-    /// use conquer_reclaim::{Owned, Shared};
-    ///
-    /// type Atomic<T> = reclaim::leak::Atomic<T, U0>;
-    ///
-    /// let atomic = Atomic::null();
-    ///
-    /// let shared = unsafe {
-    ///     Owned::leak_shared(Owned::new("string"))
-    /// };
-    ///
-    /// assert_eq!(&"string", &*shared);
-    ///
-    /// loop {
-    ///     // `shared` is simply copied in every loop iteration
-    ///     if atomic.compare_exchange_weak(Shared::none(), shared, Relaxed, Relaxed).is_ok() {
-    ///         // if (non-leaking) reclamation is going on, `shared` must not be accessed
-    ///         // anymore after successful insertion!
-    ///         break;
-    ///     }
-    /// }
-    ///
-    /// # assert_eq!(&"string", &*atomic.load_shared(Relaxed).unwrap())
-    /// ```
-    #[inline]
-    pub unsafe fn leak_shared<'a>(owned: Self) -> Shared<'a, T, R, N> {
-        let inner = owned.inner;
-        mem::forget(owned);
-        Shared { inner, _marker: PhantomData }
+    pub fn leak_storable(owned: Self) -> Storable<T, R, N> {
+        Storable::new(owned.inner.into())
     }
 
     /// Allocates a records wrapping `owned` and returns the pointer to the
@@ -280,7 +200,7 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Owned<T, R, N> {
     #[inline]
     fn alloc_record(owned: T) -> NonNull<T> {
         let record = Box::leak(Box::new(Record::<_, R>::new(owned)));
-        NonNull::from(&record.elem)
+        NonNull::from(&record.data)
     }
 }
 
@@ -322,7 +242,7 @@ impl<T, R: Reclaim, N: Unsigned + 'static> BorrowMut<T> for Owned<T, R, N> {
 
 /********** impl Default **************************************************************************/
 
-impl<T: Default, R: Reclaim, N: Unsigned + 'static> Default for Owned<T, R, N> {
+impl<T: Default, R: Reclaim, N: Unsigned> Default for Owned<T, R, N> {
     #[inline]
     fn default() -> Self {
         Self::new(T::default())
@@ -365,10 +285,7 @@ impl<T, R: Reclaim, N: Unsigned + 'static> DerefMut for Owned<T, R, N> {
 /********** impl Pointer **************************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned + 'static> fmt::Pointer for Owned<T, R, N> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Pointer::fmt(&self.inner.decompose_ptr(), f)
-    }
+    impl_fmt_pointer!();
 }
 
 /********** impl Drop *****************************************************************************/
@@ -377,13 +294,13 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Drop for Owned<T, R, N> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            let record = Record::<_, R>::from_raw(self.inner.decompose_ptr());
+            let record = Record::<_, R>::ptr_from_data(self.inner.decompose_ptr());
             mem::drop(Box::from_raw(record));
         }
     }
 }
 
-/********** impl From *****************************************************************************/
+/********** impl From (T) *************************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned + 'static> From<T> for Owned<T, R, N> {
     #[inline]
@@ -392,25 +309,14 @@ impl<T, R: Reclaim, N: Unsigned + 'static> From<T> for Owned<T, R, N> {
     }
 }
 
-/********** impl TryFrom **************************************************************************/
+/********** impl From (Owned) for Box<Record<T, R>> ***********************************************/
 
-impl<T, R: Reclaim, N: Unsigned + 'static> TryFrom<Atomic<T, R, N>> for Owned<T, R, N> {
-    type Error = NullError;
-
+impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Box<Record<T, R>> {
     #[inline]
-    fn try_from(atomic: Atomic<T, R, N>) -> Result<Self, Self::Error> {
-        atomic.into_owned().ok_or(NullError)
+    fn from(owned: Owned<T, R, N>) -> Self {
+        unsafe {
+            let record = Record::<_, R>::ptr_from_data(owned.inner.decompose_ptr());
+            Box::from_raw(record)
+        }
     }
-}
-
-/********** impl MarkedNonNullable ****************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> MarkedNonNullable for Owned<T, R, N> {
-    impl_marked_non_nullable!();
-}
-
-/********** impl NonNullable **********************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> NonNullable for Owned<T, R, N> {
-    impl_non_nullable!();
 }

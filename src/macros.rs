@@ -103,7 +103,7 @@ macro_rules! impl_common {
 
         #[inline]
         pub fn split_tag(self) -> (Self, usize) {
-        let (inner, tag) = self.inner.split_tag();
+            let (inner, tag) = self.inner.split_tag();
             (Self { inner, _marker: PhantomData }, tag)
         }
 
@@ -120,6 +120,25 @@ macro_rules! impl_common {
         #[inline]
         pub fn decompose_tag(self) -> usize {
             self.inner.decompose_tag()
+        }
+    };
+}
+
+macro_rules! impl_fmt_debug {
+    ($ty_name:ident) => {
+        #[inline]
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            let (ptr, tag) = self.inner.decompose();
+            f.debug_struct(stringify!($ty_name)).field("ptr", &ptr).field("tag", &tag).finish()
+        }
+    };
+}
+
+macro_rules! impl_fmt_pointer {
+    () => {
+        #[inline]
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fmt::Pointer::fmt(&self.inner, f)
         }
     };
 }

@@ -1,5 +1,4 @@
 use core::mem;
-use core::ptr::NonNull;
 
 use crate::traits::Reclaim;
 
@@ -7,124 +6,75 @@ use crate::traits::Reclaim;
 // Record
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A wrapper type for `T` that is associated with a concrete reclamation and
-/// contains additional data per heap-allocated value.
+/// A wrapper type that prepends an instance of `T` with an instance of the
+/// [`Header`][Reclaim::Header] type associated to the specified
+/// [`Reclaimer`][Reclaim].
 ///
-/// Each time a new [`Owned`][crate::Owned] or (non-null)
-/// [`Atomic`][crate::atomic::Atomic] is created, an instance of this type is
-/// allocated as a wrapper for the desired value.
-/// The record and its header are never directly exposed to the data structure
-/// using a given memory reclamation scheme and should only be accessed by the
-/// reclamation scheme itself.
+/// This struct guarantees the layout of its fields to match the declaration
+/// order, i.e., the `header` always precedes the `data`.
 #[derive(Debug, Default, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(C)]
 pub struct Record<T, R: Reclaim> {
     /// The record's header
     pub(crate) header: R::Header,
-    /// The record's wrapped (inner) element
-    pub(crate) elem: T,
+    /// The wrapped record data itself.
+    pub(crate) data: T,
 }
 
 /********** impl inherent *************************************************************************/
 
 impl<T, R: Reclaim> Record<T, R> {
-    /// Creates a new [`Record`] with the specified `elem` and a default header.
+    /// Creates a new [`Record`] with the specified `data` and a default header.
     #[inline]
-    pub fn new(elem: T) -> Self {
-        Self { header: Default::default(), elem }
+    pub fn new(data: T) -> Self {
+        Self { header: Default::default(), data }
     }
 
-    /// Creates a new [`Record`] with the specified `elem` and `header`.
+    /// Creates a new [`Record`] with the specified `header` and `data`.
     #[inline]
-    pub fn with_header(elem: T, header: R::Header) -> Self {
-        Self { header, elem }
+    pub fn with_header(header: R::Header, data: T) -> Self {
+        Self { header, data }
     }
 
-    /// Returns a reference to the record's header.
-    #[inline]
-    pub fn header(&self) -> &R::Header {
-        &self.header
-    }
-
-    /// Returns a reference to the record's element.
-    #[inline]
-    pub fn elem(&self) -> &T {
-        &self.elem
-    }
-
-    /// Calculates the address of the [`Record`] for the given pointer to a
-    /// wrapped `elem` and returns the resulting pointer.
+    /// Returns the pointer to the [`Record`] containing the value pointed to by
+    /// `data`.
     ///
     /// # Safety
     ///
-    /// The `elem` pointer must be a valid pointer to an instance of `T` that
-    /// was constructed as part of a [`Record`]. Otherwise, the pointer
-    /// arithmetic used to determine the address will result in a pointer to
-    /// unrelated memory, which is likely to lead to undefined behaviour.
+    /// The `data` pointer must be a valid pointer to an instance of `T` that
+    /// was constructed as part of a [`Record`].
     #[inline]
-    pub unsafe fn from_raw(elem: *mut T) -> *mut Self {
-        ((elem as usize) - Self::offset_elem()) as *mut _
+    pub unsafe fn ptr_from_data(data: *mut T) -> *mut Self {
+        ((data as usize) - Self::offset_data()) as *mut _
     }
 
-    /// Calculates the address of the [`Record`] for the given pointer to a
-    /// wrapped non-nullable `elem` and returns the resulting pointer.
+    /// Returns the pointer to the [`header`][Record::header] field of the
+    /// [`Record`] containing the value pointed to by the `data`.
     ///
     /// # Safety
     ///
-    /// The `elem` pointer must be a valid pointer to an instance of `T` that
-    /// was constructed as part of a [`Record`]. Otherwise, the pointer
-    /// arithmetic used to determine the address will result in a pointer to
-    /// unrelated memory, which is likely to lead to undefined behaviour.
+    /// The `data` pointer must be a valid pointer to an instance of `T` that
+    /// was constructed as part of a [`Record`].
     #[inline]
-    pub unsafe fn from_raw_non_null(elem: NonNull<T>) -> NonNull<Self> {
-        NonNull::new_unchecked(Self::from_raw(elem.as_ptr()))
+    pub unsafe fn header_ptr_from_data(data: *mut T) -> *mut R::Header {
+        Self::ptr_from_data(data).cast()
     }
 
+    /// Returns the offset in bytes from the address of a [`Record`] to its
+    /// [`data`][Record::data] field.
     #[inline]
-    pub unsafe fn from_header(header: *mut R::Header) -> *mut Self {
-        header as _
+    pub fn offset_data() -> usize {
+        record_to_data_offset::<R::Header, T>()
     }
+}
 
-    #[inline]
-    pub unsafe fn from_header_non_null(header: NonNull<R::Header>) -> NonNull<Self> {
-        header.cast()
-    }
+/********** helper function ***********************************************************************/
 
-    /// Returns a reference to the header for the record at the pointed-to
-    /// location of the pointer `elem`.
-    ///
-    /// # Safety
-    ///
-    /// The pointer `elem` must be a valid pointer to an instance of `T` that
-    /// was allocated as part of a `Record`.
-    /// Otherwise, the pointer arithmetic used to calculate the header's address
-    /// will be incorrect and lead to undefined behavior.
-    #[inline]
-    pub unsafe fn header_from_raw(elem: *mut T) -> *mut R::Header {
-        ((elem as usize) - Self::offset_elem()) as *mut _
-    }
+#[inline]
+const fn record_to_data_offset<H, T>() -> usize {
+    // this matches rustc's algorithm for laying out #[repr(C)] types.
+    let header_size = mem::size_of::<H>();
+    let data_align = mem::align_of::<T>();
 
-    /// Returns a reference to the header for the record at the pointed-to
-    /// location of the non-nullable pointer `elem`.
-    ///
-    /// # Safety
-    ///
-    /// The pointer `elem` must be a valid pointer to an instance of `T` that
-    /// was allocated as part of a `Record`.
-    /// Otherwise, the pointer arithmetic used to calculate the header's address
-    /// will be incorrect and lead to undefined behavior.
-    #[inline]
-    pub unsafe fn header_from_raw_non_null(elem: NonNull<T>) -> NonNull<R::Header> {
-        NonNull::new_unchecked(((elem.as_ptr() as usize) - Self::offset_elem()) as *mut _)
-    }
-
-    /// Returns the offset in bytes from the address of a record to its element
-    /// field.
-    #[inline]
-    pub fn offset_elem() -> usize {
-        let header_size = mem::size_of::<R::Header>();
-        let elem_align = mem::align_of::<T>();
-
-        header_size + (header_size.wrapping_neg() & (elem_align - 1))
-    }
+    header_size + (header_size.wrapping_neg() & (data_align - 1))
 }

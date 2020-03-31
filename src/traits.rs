@@ -1,115 +1,90 @@
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::{MarkedPtr, MaybeNull};
+use conquer_pointer::typenum::Unsigned;
+use conquer_pointer::MarkedPtr;
 
 use crate::atomic::Atomic;
 use crate::retired::Retired;
-use crate::typenum::Unsigned;
-use crate::{NotEqualError, Shared};
+use crate::{NotEqual, Protected};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // GlobalReclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait GlobalReclaim: Reclaim {
-    fn build_global_ref() -> Self::Ref;
-
-    fn build_guard() -> <Self::Ref as ReclaimRef>::Guard {
-        Self::build_global_ref().into_guard()
+pub unsafe trait GlobalReclaim: Reclaim {
+    fn build_guard() -> Self::Guard {
+        <Self as GlobalReclaim>::build_local_state().build_guard()
     }
 
-    unsafe fn retire(retired: Retired<Self>) {
-        Self::build_global_ref().retire(retired);
+    unsafe fn retire_record(retired: Retired<Self>) {
+        <Self as GlobalReclaim>::build_local_state().retire_record(retired)
     }
+
+    fn build_local_state() -> Self::LocalState;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Reclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait Reclaim: Default + Sync + Sized + 'static {
-    type Header: Default + Sync + Sized + 'static;
-    type Ref: ReclaimRef<Reclaimer = Self> + BuildReclaimRef<'static>;
-    // type Ref<'global>: ReclaimRef<Reclaimer = Self> + BuildReclaimRef<'a>;
+pub trait Reclaim: Default + Sync + Sized + 'static {
+    type Guard: Protect<Reclaimer = Self>;
+    type Header: Default + Sized;
+    type LocalState: LocalState<Reclaimer = Self> + 'static;
 
-    fn new() -> Self;
+    unsafe fn build_local_state(&self) -> Self::LocalState;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// ReclaimRef (trait)
+// LocalState (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait ReclaimRef: Clone + Sized {
-    type Guard: Protect<Reclaimer = Self::Reclaimer>;
+/// A trait for references to thread-local state instances of a specific
+/// [`Reclaim`] mechanism.
+///
+/// Thread-local state references should in general be cheap to construct and
+/// have to be cloneable.
+/// Their two primary purposes are:
+///
+/// - creating new guard instances (which implement the [`Protect`] trait)
+/// - retiring records
+pub unsafe trait LocalState: Sized {
+    /// The associated [`Reclaim`] mechanism.
     type Reclaimer: Reclaim;
 
-    fn from_ref<'global>(global: &'global Self::Reclaimer) -> Self
-    where
-        Self: BuildReclaimRef<'global>,
-    {
-        <Self as BuildReclaimRef<'_>>::from_ref(global)
-    }
-
-    /// Creates a new [`ReclaimRef`] from a raw pointer to the ...
-    unsafe fn from_raw(global: &Self::Reclaimer) -> Self
-    where
-        Self: 'static;
-
-    fn into_guard(self) -> Self::Guard;
-    unsafe fn retire(self, retired: Retired<Self::Reclaimer>);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// BuildReclaimRef (trait)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub trait BuildReclaimRef<'global>: ReclaimRef + 'global {
-    fn from_ref(global: &'global Self::Reclaimer) -> Self;
+    /// Creates a new guard instance.
+    fn build_guard(&self) -> <Self::Reclaimer as Reclaim>::Guard;
+    unsafe fn retire_record(&self, retired: Retired<Self::Reclaimer>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Protect (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A trait for implementing guard types associated with a specific
-/// [`Reclaimer`].
-pub unsafe trait Protect: Clone + Sized {
-    /// The associated memory reclaimer.
+/// A trait for implementing guard types associated with a specific [`Reclaim`]
+/// mechanism.
+pub unsafe trait Protect {
+    /// The associated [`Reclaim`] mechanism.
     type Reclaimer: Reclaim;
 
-    /// Releases any protection that may be provided by the guard.
+    /// Loads and protects the value currently stored in `src` and returns a
+    /// protected [`Shared`] pointer to it.
     ///
-    /// This method has no effect for guards that also implement
-    /// [`ProtectRegion`].
-    fn release(&mut self);
-
-    /// Loads and protects the value currently stored in `atomic` and returns
-    /// an optional protected [`Shared`] reference.
-    ///
-    /// `protect` takes an [`Ordering`] argument ...
-    fn protect<T, N: Unsigned + 'static>(
+    /// `protect` takes an [`Ordering`] argument...
+    fn protect<T, N: Unsigned>(
         &mut self,
-        src: &Atomic<T, Self::Reclaimer, N>,
+        atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
-    ) -> MaybeNull<Shared<T, Self::Reclaimer, N>>;
+    ) -> Protected<T, Self::Reclaimer, N>;
 
-    /// Loads and protects the value currently stored in `atomic` if it equals
-    /// the `expected` pointer and returns an optional protected [`Shared`]
-    /// reference.
+    /// Loads and protects the value currently stored in `src` if it equals the
+    /// `expected` value and returns a protected [`Shared`] pointer to it.
     ///
-    /// `protect_if_equal` takes and [`Ordering`] argument ...
-    fn protect_if_equal<T, N: Unsigned + 'static>(
+    /// `protect_if_equal` takes an [`Ordering`] argument...
+    fn protect_if_equal<T, N: Unsigned>(
         &mut self,
-        src: &Atomic<T, Self::Reclaimer, N>,
+        atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<MaybeNull<Shared<T, Self::Reclaimer, N>>, NotEqualError>;
+    ) -> Result<Protected<T, Self::Reclaimer, N>, NotEqual>;
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// ProtectRegion (trait)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// An extension trait for guard types of [`Reclaimer`]s that protect entire
-/// regions of code rather than individual [`Atomic`] pointers.
-pub unsafe trait ProtectRegion: Protect {}

@@ -1,94 +1,144 @@
+use core::fmt;
 use core::marker::PhantomData;
 
-use conquer_pointer::MaybeNull;
+use conquer_pointer::typenum::Unsigned;
+use conquer_pointer::{MarkedNonNull, MarkedPtr, Null};
 
-use crate::atomic::store::StoreArg;
-use crate::typenum::Unsigned;
-use crate::{Reclaim, Shared, Unlinked, Unprotected};
+use crate::{Maybe, Protected, Shared, Unlinked, Unprotected};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// CompareArg (trait)
+// Comparable
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A trait for abstracting over various possible argument types for the compare
-/// part of a CAS.
-pub trait CompareArg: StoreArg {
-    type Unlinked: Sized;
+/// A raw, nullable and potentially marked pointer type this is associated to a
+/// [`Reclaimer`][crate::Reclaim] and can be used as the compare argument for
+/// a *compare-and-swap* operation.
+pub struct Comparable<T, R, N> {
+    inner: MarkedPtr<T, N>,
+    _marker: PhantomData<R>,
+}
 
+/********** impl Clone ****************************************************************************/
+
+impl<T, R, N> Clone for Comparable<T, R, N> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self { inner: self.inner, _marker: PhantomData }
+    }
+}
+
+/********** impl Copy *****************************************************************************/
+
+impl<T, R, N> Copy for Comparable<T, R, N> {}
+
+/********** impl inherent *************************************************************************/
+
+impl<T, R, N> Comparable<T, R, N> {
+    /// Creates a new `null` pointer.
+    #[inline]
+    pub const fn null() -> Self {
+        Self::new(MarkedPtr::null())
+    }
+
+    /// Returns the inner raw [`MarkedPtr`].
+    #[inline]
+    pub const fn into_marked_ptr(self) -> MarkedPtr<T, N> {
+        self.inner
+    }
+
+    /// Creates a new `Comparable`.
+    #[inline]
+    pub(crate) const fn new(inner: MarkedPtr<T, N>) -> Self {
+        Self { inner, _marker: PhantomData }
+    }
+}
+
+/********** impl Debug ****************************************************************************/
+
+impl<T, R, N: Unsigned> fmt::Debug for Comparable<T, R, N> {
+    impl_fmt_debug!(Comparable);
+}
+
+/********** impl From (Protected) *****************************************************************/
+
+impl<T, R, N> From<Protected<'_, T, R, N>> for Comparable<T, R, N> {
+    #[inline]
+    fn from(protected: Protected<'_, T, R, N>) -> Self {
+        Self { inner: protected.inner, _marker: PhantomData }
+    }
+}
+
+/********** impl From (Shared) ********************************************************************/
+
+impl<T, R, N> From<Shared<'_, T, R, N>> for Comparable<T, R, N> {
+    #[inline]
+    fn from(shared: Shared<'_, T, R, N>) -> Self {
+        Self { inner: shared.inner.into_marked_ptr(), _marker: PhantomData }
+    }
+}
+
+/********** impl From (Unprotected) ***************************************************************/
+
+impl<T, R, N> From<Unprotected<T, R, N>> for Comparable<T, R, N> {
+    #[inline]
+    fn from(unprotected: Unprotected<T, R, N>) -> Self {
+        Self { inner: unprotected.inner, _marker: PhantomData }
+    }
+}
+
+/********** impl Pointer **************************************************************************/
+
+impl<T, R, N: Unsigned> fmt::Pointer for Comparable<T, R, N> {
+    impl_fmt_pointer!();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Unlink (trait)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// An internal (not exported) trait for transforming some marked pointer type
+/// into an appropriate [`Unlinked`] or `null` variant after a successful
+/// *compare-and-swap* operation.
+pub trait Unlink {
+    /// The [`Unlinked`] type.
+    type Unlinked;
+
+    /// Converts `self` into the associated unlinked type.
     unsafe fn into_unlinked(self) -> Self::Unlinked;
 }
 
-/// Implements `CompareArg` for an unwrapped type.
-macro_rules! impl_compare_arg_for_type {
-    () => {
-        type Unlinked = Unlinked<Self::Item, Self::Reclaimer, Self::MarkBits>;
+/********** impl Protected ************************************************************************/
 
-        #[inline]
-        unsafe fn into_unlinked(self) -> Self::Unlinked {
-            Unlinked { inner: self.inner, _marker: PhantomData }
-        }
-    };
-}
-
-/// Implements `CompareArg` for `Option<T>`.
-macro_rules! impl_compare_arg_for_option {
-    () => {
-        type Unlinked = Option<Unlinked<Self::Item, Self::Reclaimer, Self::MarkBits>>;
-
-        #[inline]
-        unsafe fn into_unlinked(self) -> Self::Unlinked {
-            self.map(|ptr| Unlinked { inner: ptr.inner, _marker: PhantomData })
-        }
-    };
-}
-
-/// Implements `CompareArg` for `MaybeNull<T>`.
-macro_rules! impl_compare_arg_for_maybe_null {
-    () => {
-        type Unlinked = MaybeNull<Unlinked<Self::Item, Self::Reclaimer, Self::MarkBits>>;
-
-        #[inline]
-        unsafe fn into_unlinked(self) -> Self::Unlinked {
-            self.map(|ptr| Unlinked { inner: ptr.inner, _marker: PhantomData })
-        }
-    };
-}
-
-/********** Shared ********************************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Shared<'_, T, R, N> {
-    impl_compare_arg_for_type!();
-}
-
-impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Option<Shared<'_, T, R, N>> {
-    impl_compare_arg_for_option!();
-}
-
-impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for MaybeNull<Shared<'_, T, R, N>> {
-    impl_compare_arg_for_maybe_null!();
-}
-
-/********** Unlinked ******************************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Unlinked<T, R, N> {
-    impl_compare_arg_for_type!();
-}
-
-impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Option<Unlinked<T, R, N>> {
-    impl_compare_arg_for_option!();
-}
-
-impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for MaybeNull<Unlinked<T, R, N>> {
-    impl_compare_arg_for_maybe_null!();
-}
-
-/********** Unprotected ***************************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> CompareArg for Unprotected<T, R, N> {
-    type Unlinked = MaybeNull<Unlinked<Self::Item, Self::Reclaimer, Self::MarkBits>>;
+impl<T, R, N: Unsigned> Unlink for Protected<'_, T, R, N> {
+    type Unlinked = Maybe<Unlinked<T, R, N>>;
 
     #[inline]
     unsafe fn into_unlinked(self) -> Self::Unlinked {
-        MaybeNull::from(self.as_marked_ptr()).map(|inner| Unlinked { inner, _marker: PhantomData })
+        Unprotected { inner: self.inner, _marker: PhantomData }.into_unlinked()
+    }
+}
+
+/********** impl Shared ***************************************************************************/
+
+impl<T, R, N: Unsigned> Unlink for Shared<'_, T, R, N> {
+    type Unlinked = Unlinked<T, R, N>;
+
+    #[inline]
+    unsafe fn into_unlinked(self) -> Self::Unlinked {
+        Unlinked { inner: self.inner, _marker: PhantomData }
+    }
+}
+
+/********** impl Unprotected **********************************************************************/
+
+impl<T, R, N: Unsigned> Unlink for Unprotected<T, R, N> {
+    type Unlinked = Maybe<Unlinked<T, R, N>>;
+
+    #[inline]
+    unsafe fn into_unlinked(self) -> Self::Unlinked {
+        match MarkedNonNull::new(self.inner) {
+            Ok(inner) => Maybe::Some(Unlinked { inner, _marker: PhantomData }),
+            Err(Null(tag)) => Maybe::Null(tag),
+        }
     }
 }

@@ -23,53 +23,45 @@ use crate::traits::Reclaim;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub struct Retired<R> {
-    raw: RawRetired,
+    raw: RetiredPtr,
     _marker: PhantomData<R>,
 }
 
 /********** impl inherent *************************************************************************/
 
 impl<R: Reclaim + 'static> Retired<R> {
-    /// Creates a new [`Retired`] record from a raw pointer.
+    /// Returns the raw pointer to the retired record.
+    #[inline]
+    pub fn into_raw(self) -> RetiredPtr {
+        self.raw
+    }
+
+    /// Creates a new [`Retired`] from a raw non-`null` pointer.
     ///
     /// # Safety
     ///
-    /// The caller has to ensure numerous safety invariants in order for a
-    /// [`Retired`] record to be used safely:
-    ///
-    /// - the given `record` pointer **must** point to a valid heap allocated
-    ///   value
-    /// - the record **must** have been allocated as part of a [`Record`] of
-    ///   the appropriate [`Reclaim`] implementation
-    /// - *if* the type of the retired record implements [`Drop`] *and* contains
-    ///   any non-static references, it must be ensured that these are **not**
-    ///   accessed by the [`drop`][Drop::drop] function.
+    /// todo..
     #[inline]
-    pub(crate) unsafe fn new<'a, T: 'a>(ptr: NonNull<T>) -> Self {
-        let any: NonNull<dyn Any + 'a> = Record::<T, R>::from_raw_non_null(ptr);
+    pub(crate) unsafe fn new_unchecked<'a, T: 'a>(ptr: NonNull<T>) -> Self {
+        let any: NonNull<dyn Any + 'a> = Record::<T, R>::non_null_from_data(ptr);
         let any: NonNull<dyn Any + 'static> = mem::transmute(any);
 
-        Self { raw: RawRetired { ptr: any }, _marker: PhantomData }
-    }
-
-    #[inline]
-    pub fn into_raw(self) -> RawRetired {
-        self.raw
+        Self { raw: RetiredPtr { ptr: any }, _marker: PhantomData }
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// RawRetired
+// RetiredPtr
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A type-erased fat pointer to a retired record.
-pub struct RawRetired {
+/// A type-erased, non-`null` fat pointer to a retired record.
+pub struct RetiredPtr {
     ptr: NonNull<dyn Any + 'static>,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl RawRetired {
+impl RetiredPtr {
     /// Converts a retired record to a raw pointer.
     ///
     /// Since retired records are type-erased trait object (fat) pointers to
@@ -101,7 +93,7 @@ impl RawRetired {
 
 /********** impl PartialEq ************************************************************************/
 
-impl PartialEq for RawRetired {
+impl PartialEq for RetiredPtr {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.as_ptr().eq(&other.as_ptr())
@@ -110,7 +102,7 @@ impl PartialEq for RawRetired {
 
 /********** impl PartialOrd ***********************************************************************/
 
-impl PartialOrd for RawRetired {
+impl PartialOrd for RetiredPtr {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         self.as_ptr().partial_cmp(&other.as_ptr())
@@ -119,7 +111,7 @@ impl PartialOrd for RawRetired {
 
 /********** impl Ord ******************************************************************************/
 
-impl Ord for RawRetired {
+impl Ord for RetiredPtr {
     #[inline]
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.as_ptr().cmp(&other.as_ptr())
@@ -128,11 +120,11 @@ impl Ord for RawRetired {
 
 /********** impl Eq *******************************************************************************/
 
-impl Eq for RawRetired {}
+impl Eq for RetiredPtr {}
 
 /********** impl Debug ****************************************************************************/
 
-impl fmt::Debug for RawRetired {
+impl fmt::Debug for RetiredPtr {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Retired").field("address", &self.as_ptr()).finish()
@@ -141,7 +133,7 @@ impl fmt::Debug for RawRetired {
 
 /********** impl Display **************************************************************************/
 
-impl fmt::Display for RawRetired {
+impl fmt::Display for RetiredPtr {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.as_ptr(), f)
@@ -150,7 +142,7 @@ impl fmt::Display for RawRetired {
 
 /********** impl Pointer **************************************************************************/
 
-impl fmt::Pointer for RawRetired {
+impl fmt::Pointer for RetiredPtr {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.as_ptr(), f)

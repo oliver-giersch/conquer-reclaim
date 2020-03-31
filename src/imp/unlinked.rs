@@ -1,7 +1,9 @@
 use core::fmt;
 use core::marker::PhantomData;
+use core::mem::ManuallyDrop;
+use core::ptr;
 
-use conquer_pointer::{MarkedNonNull, MarkedNonNullable, MarkedPtr, NonNullable};
+use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::retired::Retired;
 use crate::traits::{GlobalReclaim, Reclaim};
@@ -15,12 +17,26 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Unlinked<T, R, N> {
     impl_common!();
 
     #[inline]
-    pub fn into_retired(self) -> Retired<R> {
-        unsafe { Retired::new(self.inner.decompose_non_null()) }
+    pub fn into_retired(self) -> Retired<R>
+    where
+        T: 'static,
+    {
+        unsafe { self.into_retired_unchecked() }
     }
 
     #[inline]
-    pub unsafe fn deref(&self) -> &T {
+    pub unsafe fn into_retired_unchecked(self) -> Retired<R> {
+        Retired::new_unchecked(self.inner.decompose_non_null())
+    }
+
+    #[inline]
+    pub unsafe fn take<U>(&self, take: impl (FnOnce(&T) -> &ManuallyDrop<U>) + 'static) -> U {
+        let src = take(self.as_ref());
+        ptr::read(&**src)
+    }
+
+    #[inline]
+    pub unsafe fn as_ref(&self) -> &T {
         self.inner.as_ref()
     }
 
@@ -35,7 +51,7 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Unlinked<T, R, N> {
     }
 }
 
-impl<T, R: GlobalReclaim, N: Unsigned + 'static> Unlinked<T, R, N> {
+impl<T, R: GlobalReclaim, N: Unsigned> Unlinked<T, R, N> {
     #[inline]
     pub unsafe fn retire(self)
     where
@@ -46,37 +62,18 @@ impl<T, R: GlobalReclaim, N: Unsigned + 'static> Unlinked<T, R, N> {
 
     #[inline]
     pub unsafe fn retire_unchecked(self) {
-        R::retire(self.into_retired())
+        R::retire_record(self.into_retired_unchecked())
     }
 }
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N: Unsigned + 'static> fmt::Debug for Unlinked<T, R, N> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (ptr, tag) = self.inner.decompose();
-        f.debug_struct("Unlinked").field("ptr", &ptr).field("tag", &tag).finish()
-    }
+impl<T, R, N: Unsigned> fmt::Debug for Unlinked<T, R, N> {
+    impl_fmt_debug!(Unlinked);
 }
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R, N: Unsigned + 'static> fmt::Pointer for Unlinked<T, R, N> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Pointer::fmt(&self.inner.decompose_non_null(), f)
-    }
-}
-
-/********** impl MarkedNonNullable ****************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned + 'static> MarkedNonNullable for Unlinked<T, R, N> {
-    impl_marked_non_nullable!();
-}
-
-/********** impl NonNullable **********************************************************************/
-
-impl<T, R, N: Unsigned + 'static> NonNullable for Unlinked<T, R, N> {
-    impl_non_nullable!();
+impl<T, R, N: Unsigned> fmt::Pointer for Unlinked<T, R, N> {
+    impl_fmt_pointer!();
 }
