@@ -1,10 +1,10 @@
 use core::fmt;
 use core::marker::PhantomData;
 
+use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr, Null};
 
 use crate::traits::Reclaim;
-use crate::typenum::Unsigned;
 use crate::{Maybe, Protected, Shared};
 
 /********** impl Clone ****************************************************************************/
@@ -76,7 +76,7 @@ impl<'g, T, R: Reclaim, N: Unsigned> Protected<'g, T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N> fmt::Debug for Protected<'_, T, R, N> {
+impl<T, R, N: Unsigned> fmt::Debug for Protected<'_, T, R, N> {
     impl_fmt_debug!(Protected);
 }
 
@@ -91,6 +91,6 @@ impl<T, R, N> Default for Protected<'_, T, R, N> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R, N> fmt::Pointer for Protected<'_, T, R, N> {
+impl<T, R, N: Unsigned> fmt::Pointer for Protected<'_, T, R, N> {
     impl_fmt_pointer!();
 }

@@ -2,10 +2,10 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
 
+use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
 use crate::traits::Reclaim;
-use crate::typenum::Unsigned;
 use crate::{Owned, Shared};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

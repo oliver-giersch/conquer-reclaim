@@ -9,9 +9,7 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
-    pub use crate::traits::{
-        BuildReclaimRef, GlobalReclaim, Protect, ProtectRegion, Reclaim, ReclaimRef,
-    };
+    pub use crate::traits::{GlobalReclaim, LocalState, Protect, Reclaim};
 }
 
 #[macro_use]
@@ -34,6 +32,7 @@ use core::marker::PhantomData;
 pub use conquer_pointer;
 pub use conquer_pointer::typenum;
 
+use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
@@ -41,8 +40,6 @@ pub use crate::guarded::Guarded;
 pub use crate::record::Record;
 pub use crate::retired::{Retired, RetiredPtr};
 pub use crate::traits::{GlobalReclaim, LocalState, Protect, Reclaim};
-
-use crate::typenum::Unsigned;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Maybe
@@ -72,7 +69,7 @@ pub enum Maybe<P> {
 /// When an [`Owned`] instance goes out scope, the entire [`Record`] will be
 /// de-allocated.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub struct Owned<T, R: Reclaim, N: Unsigned + 'static> {
+pub struct Owned<T, R: Reclaim, N: Unsigned> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(T, R)>,
 }

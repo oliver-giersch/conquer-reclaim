@@ -14,6 +14,9 @@ exclude = ["/.travis.yml"]
 [features]
 default = ["std"]
 
+# exports some basic lock-free data structures implemented generically
+examples = []
+
 # must be disabled for use in no_std crates
 std = []
 
@@ -22,7 +25,6 @@ cfg-if = "0.1.10"
 
 [dependencies.conquer-pointer]
 git = "https://github.com/oliver-giersch/conquer-pointer"
-default-features = false
 
 [dev-dependencies.conquer-util]
 git = "https://github.com/oliver-giersch/conquer-util"

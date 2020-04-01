@@ -168,7 +168,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     /// [acq_rel]: Ordering::AcqRel
     #[inline]
     pub fn load<'g>(&self, guard: &'g mut R::Guard, order: Ordering) -> Protected<'g, T, R, N> {
-        guard.load_protected(self, order)
+        guard.protect(self, order)
     }
 
     /// TODO: docs...
@@ -179,7 +179,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
         guard: &'g mut R::Guard,
         order: Ordering,
     ) -> Result<Protected<'g, T, R, N>, NotEqual> {
-        guard.load_protected_if_equal(self, expected, order)
+        guard.protect_if_equal(self, expected, order)
     }
 
     /// Stores either `null` or a valid pointer to an owned heap allocated value
@@ -226,7 +226,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
         new: impl Into<Storable<T, R, N>>,
         order: Ordering,
     ) -> Maybe<Unlinked<T, R, N>> {
-        match MarkedNonNull::new(self.inner.swap(new.into().into_inner(), order)) {
+        match MarkedNonNull::new(self.inner.swap(new.into().into_marked_ptr(), order)) {
             Ok(inner) => Maybe::Some(Unlinked { inner, _marker: PhantomData }),
             Err(Null(tag)) => Maybe::Null(tag),
         }
@@ -245,8 +245,8 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     {
         let new = ManuallyDrop::new(new);
         unsafe {
-            let compare = current.into().into_inner();
-            let store = ptr::read(&*new).into().into_inner();
+            let compare = current.into().into_marked_ptr();
+            let store = ptr::read(&*new).into().into_marked_ptr();
             self.inner
                 .compare_exchange(compare, store, (success, failure))
                 .map(|_| current.into_unlinked())
@@ -270,8 +270,8 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     {
         let new = ManuallyDrop::new(new);
         unsafe {
-            let compare = current.into().into_inner();
-            let store = ptr::read(&*new).into().into_inner();
+            let compare = current.into().into_marked_ptr();
+            let store = ptr::read(&*new).into().into_marked_ptr();
             self.inner
                 .compare_exchange_weak(compare, store, (success, failure))
                 .map(|_| current.into_unlinked())
@@ -297,7 +297,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned + 'static> Default for Atomic<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned> Default for Atomic<T, R, N> {
     #[inline]
     fn default() -> Self {
         Self::null()
@@ -306,7 +306,7 @@ impl<T, R: Reclaim, N: Unsigned + 'static> Default for Atomic<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N: Unsigned + 'static> fmt::Debug for Atomic<T, R, N> {
+impl<T, R, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (ptr, tag) = self.inner.load(Ordering::SeqCst).decompose();
@@ -337,13 +337,13 @@ impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Atomic<T, R, N> {
 impl<T, R: Reclaim, N: Unsigned> From<Storable<T, R, N>> for Atomic<T, R, N> {
     #[inline]
     fn from(storable: Storable<T, R, N>) -> Self {
-        Self { inner: AtomicMarkedPtr::new(storable.into_inner()), _marker: PhantomData }
+        Self { inner: AtomicMarkedPtr::new(storable.into_marked_ptr()), _marker: PhantomData }
     }
 }
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned + 'static> fmt::Pointer for Atomic<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.load(Ordering::SeqCst), f)

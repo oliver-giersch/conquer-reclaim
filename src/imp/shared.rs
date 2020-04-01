@@ -30,7 +30,7 @@ impl<T, R, N> Shared<'_, T, R, N> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'g, T, R: Reclaim, N: Unsigned + 'static> Shared<'g, T, R, N> {
+impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
     impl_common_from!();
     impl_common!();
 
@@ -66,7 +66,7 @@ impl<'g, T, R: Reclaim, N: Unsigned + 'static> Shared<'g, T, R, N> {
     /// GLOBAL.store(owned, Ordering::Release);
     ///
     /// // ...in thread 2
-    /// if let NotNull(shared) = GLOBAL.load(&Guard, Ordering::Acquire) {
+    /// if let NotNull(shared) = GLOBAL.load(&mut &Guard, Ordering::Acquire) {
     ///     let foo = unsafe { shared.deref() };
     ///     assert_eq!(foo.bar, -1);
     /// }
@@ -99,7 +99,8 @@ impl<'g, T, R: Reclaim, N: Unsigned + 'static> Shared<'g, T, R, N> {
     /// involved in de-referencing a [`Shared`].
     #[inline]
     pub unsafe fn decompose_ref(self) -> (&'g T, usize) {
-        self.inner.decompose_ref_unbounded()
+        let (ptr, tag) = self.inner.decompose();
+        (&*ptr.as_ptr(), tag)
     }
 }
 

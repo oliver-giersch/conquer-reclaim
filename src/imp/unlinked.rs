@@ -3,16 +3,17 @@ use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 use core::ptr;
 
+use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::retired::Retired;
 use crate::traits::{GlobalReclaim, Reclaim};
-use crate::typenum::Unsigned;
+
 use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned + 'static> Unlinked<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
     impl_common_from!();
     impl_common!();
 
