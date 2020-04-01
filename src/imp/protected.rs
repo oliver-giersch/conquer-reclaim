@@ -38,6 +38,9 @@ impl<T, R, N> Protected<'_, T, R, N> {
 /********** impl inherent *************************************************************************/
 
 impl<'g, T, R: Reclaim, N: Unsigned> Protected<'g, T, R, N> {
+    impl_from_ptr_for_nullable!();
+    impl_from_non_null!();
+
     #[inline]
     pub fn is_null(self) -> bool {
         self.inner.is_null()

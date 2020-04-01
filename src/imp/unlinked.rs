@@ -14,7 +14,8 @@ use crate::Unlinked;
 /********** impl inherent *************************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
-    impl_common_from!();
+    impl_from_ptr!();
+    impl_from_non_null!();
     impl_common!();
 
     #[inline]

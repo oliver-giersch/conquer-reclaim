@@ -1,13 +1,26 @@
-macro_rules! impl_common_from {
+macro_rules! impl_from_ptr {
     () => {
         #[inline]
         pub unsafe fn from_marked_ptr(ptr: MarkedPtr<T, N>) -> Self {
             Self { inner: MarkedNonNull::new_unchecked(ptr), _marker: PhantomData }
         }
+    };
+}
 
+macro_rules! impl_from_ptr_for_nullable {
+    () => {
+        #[inline]
+        pub unsafe fn from_marked_ptr(ptr: MarkedPtr<T, N>) -> Self {
+            Self { inner: ptr, _marker: PhantomData }
+        }
+    };
+}
+
+macro_rules! impl_from_non_null {
+    () => {
         #[inline]
         pub unsafe fn from_marked_non_null(ptr: MarkedNonNull<T, N>) -> Self {
-            Self { inner: ptr, _marker: PhantomData }
+            Self { inner: ptr.into(), _marker: PhantomData }
         }
     };
 }

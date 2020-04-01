@@ -82,7 +82,8 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
         }
     }
 
-    impl_common_from!();
+    impl_from_ptr!();
+    impl_from_non_null!();
 
     /// Consumes the [`Owned`], de-allocates its memory and extracts the
     /// contained value.

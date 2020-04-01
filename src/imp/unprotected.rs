@@ -2,7 +2,7 @@ use core::fmt;
 use core::marker::PhantomData;
 
 use conquer_pointer::typenum::Unsigned;
-use conquer_pointer::MarkedPtr;
+use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::atomic::Storable;
 use crate::traits::Reclaim;
@@ -38,6 +38,9 @@ impl<T, R, N> Unprotected<T, R, N> {
 /********** impl inherent *************************************************************************/
 
 impl<T, R, N: Unsigned> Unprotected<T, R, N> {
+    impl_from_ptr_for_nullable!();
+    impl_from_non_null!();
+
     #[inline]
     pub fn is_null(self) -> bool {
         self.inner.is_null()
