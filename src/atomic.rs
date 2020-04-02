@@ -167,7 +167,11 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     /// [release]: Ordering::Release
     /// [acq_rel]: Ordering::AcqRel
     #[inline]
-    pub fn load<'g>(&self, guard: &'g mut R::Guard, order: Ordering) -> Protected<'g, T, R, N> {
+    pub fn load<'g>(
+        &self,
+        guard: &'g mut impl Protect<Reclaimer = R>,
+        order: Ordering,
+    ) -> Protected<'g, T, R, N> {
         guard.protect(self, order)
     }
 
@@ -176,7 +180,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     pub fn load_if_equal<'g>(
         &self,
         expected: MarkedPtr<T, N>,
-        guard: &'g mut R::Guard,
+        guard: &'g mut impl Protect<Reclaimer = R>,
         order: Ordering,
     ) -> Result<Protected<'g, T, R, N>, NotEqual> {
         guard.protect_if_equal(self, expected, order)

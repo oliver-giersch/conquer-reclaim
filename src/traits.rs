@@ -12,7 +12,7 @@ use crate::{NotEqual, Protected};
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub unsafe trait GlobalReclaim: Reclaim {
-    fn build_guard() -> Self::Guard {
+    fn build_guard() -> <Self::LocalState as LocalState>::Guard {
         <Self as GlobalReclaim>::build_local_state().build_guard()
     }
 
@@ -28,7 +28,6 @@ pub unsafe trait GlobalReclaim: Reclaim {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub trait Reclaim: Default + Sync + Sized + 'static {
-    type Guard: Protect<Reclaimer = Self>;
     type Header: Default + Sized;
     type LocalState: LocalState<Reclaimer = Self> + 'static;
 
@@ -49,11 +48,13 @@ pub trait Reclaim: Default + Sync + Sized + 'static {
 /// - creating new guard instances (which implement the [`Protect`] trait)
 /// - retiring records
 pub unsafe trait LocalState: Sized {
+    /// The associated [`Protect`] type.
+    type Guard: Protect<Reclaimer = Self::Reclaimer>;
     /// The associated [`Reclaim`] mechanism.
     type Reclaimer: Reclaim;
 
     /// Creates a new guard instance.
-    fn build_guard(&self) -> <Self::Reclaimer as Reclaim>::Guard;
+    fn build_guard(&self) -> Self::Guard;
     unsafe fn retire_record(&self, retired: Retired<Self::Reclaimer>);
 }
 

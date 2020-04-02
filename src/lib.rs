@@ -20,7 +20,6 @@ pub mod examples;
 pub mod leak;
 
 mod atomic;
-mod guarded;
 mod imp;
 mod record;
 mod retired;
@@ -36,7 +35,6 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
-pub use crate::guarded::Guarded;
 pub use crate::record::Record;
 pub use crate::retired::{Retired, RetiredPtr};
 pub use crate::traits::{GlobalReclaim, LocalState, Protect, Reclaim};

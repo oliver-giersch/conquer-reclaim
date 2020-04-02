@@ -49,7 +49,6 @@ unsafe impl GlobalReclaim for Leaking {
 /********** impl Reclaim **************************************************************************/
 
 impl Reclaim for Leaking {
-    type Guard = Guard;
     type Header = ();
     type LocalState = LeakingLocalState;
 
@@ -69,10 +68,11 @@ pub struct LeakingLocalState;
 /********** impl LocalState ***********************************************************************/
 
 unsafe impl LocalState for LeakingLocalState {
+    type Guard = Guard;
     type Reclaimer = Leaking;
 
     #[inline]
-    fn build_guard(&self) -> <Self::Reclaimer as Reclaim>::Guard {
+    fn build_guard(&self) -> Self::Guard {
         Guard
     }
 
