@@ -1,7 +1,6 @@
 //! Type-erased (wide) pointers to retired records than can be stored and
 //! later reclaimed.
 
-use core::alloc::Layout;
 use core::cmp;
 use core::fmt;
 use core::marker::PhantomData;
@@ -31,6 +30,11 @@ pub struct Retired<R> {
 /********** impl inherent *************************************************************************/
 
 impl<R: Reclaim + 'static> Retired<R> {
+    #[inline]
+    pub fn as_raw(&self) -> &RetiredPtr {
+        &self.raw
+    }
+
     /// Returns the raw pointer to the retired record.
     #[inline]
     pub fn into_raw(self) -> RetiredPtr {
@@ -45,7 +49,7 @@ impl<R: Reclaim + 'static> Retired<R> {
     #[inline]
     pub(crate) unsafe fn new_unchecked<'a, T: 'a>(ptr: NonNull<T>) -> Self {
         let record = Record::<T, R>::ptr_from_data(ptr.as_ptr());
-        let any: NonNull<dyn Any> = NonNull::new_unchecked(record);
+        let any: NonNull<dyn AnyRecord> = NonNull::new_unchecked(record);
 
         Self { raw: RetiredPtr { ptr: mem::transmute(any) }, _marker: PhantomData }
     }
@@ -57,7 +61,7 @@ impl<R: Reclaim + 'static> Retired<R> {
 
 /// A type-erased, non-`null` fat pointer to a retired record.
 pub struct RetiredPtr {
-    ptr: NonNull<dyn Any + 'static>,
+    ptr: NonNull<dyn AnyRecord + 'static>,
 }
 
 /********** impl inherent *************************************************************************/
@@ -80,9 +84,11 @@ impl RetiredPtr {
         self.ptr.as_ptr() as *mut () as usize
     }
 
+    /// Returns the offset (in bytes) from the pointer to the retired [`Record`]
+    /// to the records data.
     #[inline]
-    pub fn layout(&self) -> Layout {
-        Layout::for_value(unsafe { self.ptr.as_ref() })
+    pub fn offset_data(&self) -> usize {
+        unsafe { self.ptr.as_ref().offset_data() }
     }
 
     /// Reclaims the retired record by dropping it and de-allocating its memory.
@@ -147,14 +153,21 @@ impl fmt::Pointer for RetiredPtr {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Any (trait)
+// AnyRecord (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A trait like [`Any`][core::any::Any] but without the `'static` bound that
 /// does not allow down-casting and is mainly useful for ensuring that the
 /// correct `Drop` code is run when dropping an `Box<dyn Any>`.
-trait Any {}
+trait AnyRecord {
+    fn offset_data(&self) -> usize;
+}
 
-/********** blanket impl for all types ************************************************************/
+/********** blanket impl for record types *********************************************************/
 
-impl<T> Any for T {}
+impl<H, R: Reclaim> AnyRecord for Record<H, R> {
+    #[inline]
+    fn offset_data(&self) -> usize {
+        Record::<H, R>::offset_data()
+    }
+}
