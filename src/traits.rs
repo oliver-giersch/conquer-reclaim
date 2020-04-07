@@ -64,7 +64,7 @@ pub unsafe trait LocalState: Sized {
 
 /// A trait for implementing guard types associated with a specific [`Reclaim`]
 /// mechanism.
-pub unsafe trait Protect {
+pub unsafe trait Protect: Clone {
     /// The associated [`Reclaim`] mechanism.
     type Reclaimer: Reclaim;
 

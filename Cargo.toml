@@ -16,6 +16,8 @@ default = ["std"]
 
 # exports some basic lock-free data structures implemented generically
 examples = []
+# adds debug capabilities to the data structures enabled by "examples"
+examples-debug = ["examples"]
 
 # must be disabled for use in no_std crates
 std = []

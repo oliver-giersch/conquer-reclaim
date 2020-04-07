@@ -1,6 +1,7 @@
 //! Type-erased (wide) pointers to retired records than can be stored and
 //! later reclaimed.
 
+use core::alloc::Layout;
 use core::cmp;
 use core::fmt;
 use core::marker::PhantomData;
@@ -79,6 +80,11 @@ impl RetiredPtr {
         self.ptr.as_ptr() as *mut () as usize
     }
 
+    #[inline]
+    pub fn layout(&self) -> Layout {
+        Layout::for_value(unsafe { self.ptr.as_ref() })
+    }
+
     /// Reclaims the retired record by dropping it and de-allocating its memory.
     ///
     /// # Safety
@@ -148,4 +154,7 @@ impl fmt::Pointer for RetiredPtr {
 /// does not allow down-casting and is mainly useful for ensuring that the
 /// correct `Drop` code is run when dropping an `Box<dyn Any>`.
 trait Any {}
+
+/********** blanket impl for all types ************************************************************/
+
 impl<T> Any for T {}

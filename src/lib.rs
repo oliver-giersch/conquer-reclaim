@@ -35,7 +35,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
-pub use crate::record::Record;
+pub use crate::record::{record_header_to_data_offset, Record};
 pub use crate::retired::{Retired, RetiredPtr};
 pub use crate::traits::{GlobalReclaim, LocalState, Protect, Reclaim};
 

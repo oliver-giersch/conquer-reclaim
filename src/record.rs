@@ -1,3 +1,4 @@
+use core::alloc::Layout;
 use core::mem;
 
 use crate::traits::Reclaim;
@@ -64,17 +65,17 @@ impl<T, R: Reclaim> Record<T, R> {
     /// [`data`][Record::data] field.
     #[inline]
     pub fn offset_data() -> usize {
-        record_to_data_offset::<R::Header, T>()
+        record_header_to_data_offset::<R::Header>(Layout::new::<T>())
     }
 }
 
 /********** helper function ***********************************************************************/
 
 #[inline]
-const fn record_to_data_offset<H, T>() -> usize {
+pub fn record_header_to_data_offset<H>(data_layout: Layout) -> usize {
     // this matches rustc's algorithm for laying out #[repr(C)] types.
     let header_size = mem::size_of::<H>();
-    let data_align = mem::align_of::<T>();
+    let data_align = data_layout.align(); // todo: not yet const fn
 
     header_size + (header_size.wrapping_neg() & (data_align - 1))
 }

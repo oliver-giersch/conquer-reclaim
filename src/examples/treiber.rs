@@ -1,6 +1,8 @@
 use core::iter::{FromIterator, IntoIterator};
 use core::mem::{self, ManuallyDrop};
 use core::ptr;
+#[cfg(feature = "examples-debug")]
+use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering::{self, Acquire, Relaxed, Release};
 
 cfg_if::cfg_if! {
@@ -18,6 +20,11 @@ use crate::{GlobalReclaim, LocalState, Maybe, Reclaim};
 
 type Atomic<T, R> = crate::Atomic<T, R, U0>;
 type Owned<T, R> = crate::Owned<T, R, U0>;
+
+/********** global node drop counter (debug) ******************************************************/
+
+#[cfg(feature = "examples-debug")]
+pub static NODE_DROP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // ArcStack
@@ -99,6 +106,7 @@ impl<T, R: Reclaim> Default for ArcStack<T, R> {
 impl<T, R: Reclaim> Drop for ArcStack<T, R> {
     #[inline]
     fn drop(&mut self) {
+        // safety: Drop Local state before the `Arc`, because it may hold a pointer into it.
         unsafe { ManuallyDrop::drop(&mut self.reclaim_local_state) };
     }
 }
@@ -130,7 +138,7 @@ impl<T, R: Reclaim> Stack<T, R> {
             // safety: The store only becomes visible if the subsequent CAS succeeds, in which case
             // the head could not have changed and has therefore not been retired by any other thread
             node.next.store(unsafe { head.assume_storable() }, Relaxed);
-            match self.head.compare_exchange(head, node, Self::RELEASE_CAS) {
+            match self.head.compare_exchange_weak(head, node, Self::RELEASE_CAS) {
                 Ok(_) => return,
                 Err(err) => node = err.input,
             }
@@ -293,5 +301,15 @@ impl<T, R: Reclaim> Node<T, R> {
     #[inline]
     fn new(elem: T) -> Self {
         Self { elem: ManuallyDrop::new(elem), next: Default::default() }
+    }
+}
+
+/********** impl Drop *****************************************************************************/
+
+#[cfg(feature = "examples-debug")]
+impl<T, R: Reclaim> Drop for Node<T, R> {
+    #[inline]
+    fn drop(&mut self) {
+        NODE_DROP_COUNTER.fetch_add(1, Ordering::Relaxed);
     }
 }
