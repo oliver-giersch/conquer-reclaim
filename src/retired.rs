@@ -92,8 +92,8 @@ impl RetiredPtr {
     }
 
     #[inline]
-    pub fn compare_with(&self, ptr: *const ()) -> cmp::Ordering {
-        self.as_ptr().cmp(&ptr)
+    pub fn data_ptr(&self) -> *const () {
+        (self.address() + self.offset_data()) as _
     }
 
     /// Reclaims the retired record by dropping it and de-allocating its memory.
