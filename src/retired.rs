@@ -91,6 +91,11 @@ impl RetiredPtr {
         unsafe { self.ptr.as_ref().offset_data() }
     }
 
+    #[inline]
+    pub fn compare_with(&self, ptr: *const ()) -> cmp::Ordering {
+        self.as_ptr().cmp(&ptr)
+    }
+
     /// Reclaims the retired record by dropping it and de-allocating its memory.
     ///
     /// # Safety

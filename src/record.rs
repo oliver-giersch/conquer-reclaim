@@ -27,7 +27,7 @@ impl<T, R: Reclaim> Record<T, R> {
     /// Creates a new [`Record`] with the specified `data` and a default header.
     #[inline]
     pub fn new(data: T) -> Self {
-        Self { header: Default::default(), data }
+        Self { header: R::Header::default(), data }
     }
 
     /// Creates a new [`Record`] with the specified `header` and `data`.
