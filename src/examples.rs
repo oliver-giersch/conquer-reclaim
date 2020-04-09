@@ -2,4 +2,5 @@
 //! structures.
 
 pub mod michael_scott;
+pub mod ramalhete;
 pub mod treiber;

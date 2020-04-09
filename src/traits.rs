@@ -27,7 +27,7 @@ pub unsafe trait GlobalReclaim: Reclaim {
 // Reclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait Reclaim: Default + Sync + Sized + 'static {
+pub trait Reclaim: Default + Send + Sync + Sized + 'static {
     type Header: Default + Sized;
     type LocalState: LocalState<Reclaimer = Self> + 'static;
 
