@@ -57,10 +57,7 @@ impl<T, R, N: Unsigned> Unprotected<T, R, N> {
 /********** impl Default **************************************************************************/
 
 impl<T, R, N> Default for Unprotected<T, R, N> {
-    #[inline]
-    fn default() -> Self {
-        Self::null()
-    }
+    default_null!();
 }
 
 /********** impl Debug ****************************************************************************/

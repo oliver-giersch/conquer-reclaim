@@ -16,6 +16,12 @@ use crate::Unlinked;
 impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
     impl_from_ptr!();
     impl_from_non_null!();
+
+    #[inline]
+    pub fn as_marked_ptr(&self) -> MarkedPtr<T, N> {
+        self.inner.into()
+    }
+
     impl_common!();
 
     #[inline]

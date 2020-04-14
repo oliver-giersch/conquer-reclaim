@@ -91,6 +91,8 @@ impl RetiredPtr {
         unsafe { self.ptr.as_ref().offset_data() }
     }
 
+    /// Returns the (type-erased) pointer to the [`data`][Record::data] field of
+    /// the retired record.
     #[inline]
     pub fn data_ptr(&self) -> *const () {
         (self.address() + self.offset_data()) as _

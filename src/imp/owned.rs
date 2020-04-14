@@ -194,7 +194,17 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
 
     #[inline]
     pub fn leak_storable(owned: Self) -> Storable<T, R, N> {
-        Storable::new(owned.inner.into())
+        let inner = owned.inner.into();
+        mem::forget(owned);
+        Storable::new(inner)
+    }
+
+    #[inline]
+    pub unsafe fn from_storable(storable: Storable<T, R, N>) -> Self {
+        Self {
+            inner: MarkedNonNull::new_unchecked(storable.into_marked_ptr()),
+            _marker: PhantomData,
+        }
     }
 
     /// Allocates a records wrapping `owned` and returns the pointer to the

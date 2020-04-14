@@ -302,10 +302,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
 /********** impl Default **************************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned> Default for Atomic<T, R, N> {
-    #[inline]
-    fn default() -> Self {
-        Self::null()
-    }
+    default_null!();
 }
 
 /********** impl Debug ****************************************************************************/

@@ -15,7 +15,7 @@ exclude = ["/.travis.yml"]
 default = ["std"]
 
 # exports some basic lock-free data structures implemented generically
-examples = []
+examples = ["conquer-util/align"]
 # adds debug capabilities to the data structures enabled by "examples"
 examples-debug = ["examples"]
 
@@ -28,6 +28,7 @@ cfg-if = "0.1.10"
 [dependencies.conquer-pointer]
 git = "https://github.com/oliver-giersch/conquer-pointer"
 
-[dev-dependencies.conquer-util]
+[dependencies.conquer-util]
 git = "https://github.com/oliver-giersch/conquer-util"
 features = ["align"]
+optional = true

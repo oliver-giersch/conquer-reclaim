@@ -16,9 +16,9 @@ use crate::traits::Reclaim;
 #[repr(C)]
 pub struct Record<T, R: Reclaim> {
     /// The record's header
-    pub(crate) header: R::Header,
+    pub header: R::Header,
     /// The wrapped record data itself.
-    pub(crate) data: T,
+    pub data: T,
 }
 
 /********** impl inherent *************************************************************************/

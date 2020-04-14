@@ -1,6 +1,14 @@
-use core::mem::MaybeUninit;
+use core::mem::{ManuallyDrop, MaybeUninit};
 use core::ptr;
 use core::sync::atomic::Ordering::{self, Acquire, Relaxed, Release};
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "std")] {
+        use std::sync::Arc;
+    } else {
+        use alloc::sync::Arc;
+    }
+}
 
 use crate::{LocalState, Maybe, Reclaim};
 
@@ -8,9 +16,92 @@ type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// ArcQueue
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct ArcQueue<T, R: Reclaim> {
+    inner: Arc<Queue<T, R>>,
+    reclaim_local_state: ManuallyDrop<R::LocalState>,
+}
+
+/*********** impl Send ****************************************************************************/
+
+unsafe impl<T, R: Reclaim> Send for ArcQueue<T, R> {}
+
+/*********** impl Clone ***************************************************************************/
+
+impl<T, R: Reclaim> Clone for ArcQueue<T, R> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            reclaim_local_state: ManuallyDrop::new(unsafe {
+                self.inner.reclaimer.build_local_state()
+            }),
+        }
+    }
+}
+
+/*********** impl inherent ************************************************************************/
+
+impl<T, R: Reclaim> ArcQueue<T, R> {
+    #[inline]
+    pub fn new() -> Self {
+        let inner = Arc::new(Queue::<_, R>::new());
+        let reclaim_local_state = unsafe { inner.reclaimer.build_local_state() };
+        Self { inner, reclaim_local_state: ManuallyDrop::new(reclaim_local_state) }
+    }
+
+    #[inline]
+    pub fn push(&self, elem: T) {
+        unsafe { self.inner.push_unchecked(elem, &*self.reclaim_local_state) }
+    }
+
+    #[inline]
+    pub fn pop(&self) -> Option<T> {
+        unsafe { self.inner.pop_unchecked(&self.reclaim_local_state) }
+    }
+}
+
+/********** impl Default **************************************************************************/
+
+impl<T, R: Reclaim> Default for ArcQueue<T, R> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/********** impl Drop *****************************************************************************/
+
+impl<T, R: Reclaim> Drop for ArcQueue<T, R> {
+    #[inline]
+    fn drop(&mut self) {
+        // safety: Drop Local state before the `Arc`, because it may hold a pointer into it.
+        unsafe { ManuallyDrop::drop(&mut self.reclaim_local_state) };
+    }
+}
+
+/********** impl From (Stack) *********************************************************************/
+
+impl<T, R: Reclaim> From<Queue<T, R>> for ArcQueue<T, R> {
+    #[inline]
+    fn from(queue: Queue<T, R>) -> Self {
+        let inner = Arc::new(queue);
+        let reclaim_local_state = ManuallyDrop::new(unsafe { inner.reclaimer.build_local_state() });
+
+        Self { inner, reclaim_local_state }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // Queue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A concurrent unbounded lock-free multi-producer/multi-consumer FIFO queue.
+///
+/// The implementation is based on an algorithm by Michael Scott and Maged
+/// Michael.
 pub struct Queue<T, R: Reclaim> {
     head: Atomic<Node<T, R>, R>,
     tail: Atomic<Node<T, R>, R>,
@@ -20,7 +111,7 @@ pub struct Queue<T, R: Reclaim> {
 /********** impl inherent *************************************************************************/
 
 impl<T, R: Reclaim> Queue<T, R> {
-    const RELEASE_CAS: (Ordering, Ordering) = (Release, Relaxed);
+    const REL_RLX: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
     pub fn new() -> Self {
@@ -41,15 +132,15 @@ impl<T, R: Reclaim> Queue<T, R> {
             let next = tail.deref().next.load_unprotected(Relaxed);
 
             if next.is_null() {
-                if tail.deref().next.compare_exchange(next, node, Self::RELEASE_CAS).is_ok() {
-                    let _ = self.tail.compare_exchange(tail, node, Self::RELEASE_CAS);
+                if tail.deref().next.compare_exchange(next, node, Self::REL_RLX).is_ok() {
+                    let _ = self.tail.compare_exchange(tail, node, Self::REL_RLX);
                     return;
                 }
             } else {
                 // safety: `next` can be safely used as store argument here, it will only actually
                 // be inserted if the CAS succeeds, in which case it could not already have been
                 // popped and retired/reclaimed
-                let _ = self.tail.compare_exchange(tail, next.assume_storable(), Self::RELEASE_CAS);
+                let _ = self.tail.compare_exchange(tail, next.assume_storable(), Self::REL_RLX);
             }
         }
     }
@@ -62,7 +153,7 @@ impl<T, R: Reclaim> Queue<T, R> {
         // safety: head can never be null
         let mut head = self.head.load(&mut head_guard, Acquire).shared_unchecked();
         while let Maybe::Some(next) = head.as_ref().next.load(&mut next_guard, Acquire).shared() {
-            match self.head.compare_exchange(head, next, Self::RELEASE_CAS) {
+            match self.head.compare_exchange(head, next, Self::REL_RLX) {
                 Ok(unlinked) => {
                     // safety: `elem` is logically and uniquely taken out (consumed) here
                     let res = Some(ptr::read(next.as_ref().elem.as_ptr()));

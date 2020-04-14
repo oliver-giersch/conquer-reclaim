@@ -79,9 +79,9 @@ impl<T, R: Reclaim> ArcStack<T, R> {
         // circumvents the restrictions on moving out of types implementing Drop.
         let (inner, mut reclaim_local_state) = unsafe {
             let inner = ptr::read(&self.inner);
-            let reclaimer_thread_state = ptr::read(&self.reclaim_local_state);
+            let reclaim_local_state = ptr::read(&self.reclaim_local_state);
             mem::forget(self);
-            (inner, reclaimer_thread_state)
+            (inner, reclaim_local_state)
         };
 
         Arc::try_unwrap(inner)

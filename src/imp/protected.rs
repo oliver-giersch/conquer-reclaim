@@ -86,10 +86,7 @@ impl<T, R, N: Unsigned> fmt::Debug for Protected<'_, T, R, N> {
 /********** impl Default **************************************************************************/
 
 impl<T, R, N> Default for Protected<'_, T, R, N> {
-    #[inline]
-    fn default() -> Self {
-        Self::null()
-    }
+    default_null!();
 }
 
 /********** impl Pointer **************************************************************************/
