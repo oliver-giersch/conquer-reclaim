@@ -9,7 +9,7 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
-    pub use crate::traits::{GlobalReclaim, LocalState, Protect, Reclaim};
+    pub use crate::traits::{LocalState, Protect, Reclaim};
 }
 
 #[macro_use]
@@ -17,7 +17,7 @@ mod macros;
 
 #[cfg(feature = "examples")]
 pub mod examples;
-pub mod leak;
+//pub mod leak;
 
 mod atomic;
 mod imp;
@@ -37,7 +37,7 @@ use conquer_pointer::{MarkedNonNull, MarkedPtr};
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
 pub use crate::record::Record;
 pub use crate::retired::{Retired, RetiredPtr};
-pub use crate::traits::{GlobalReclaim, LocalState, Protect, Reclaim};
+pub use crate::traits::{LocalState, Protect, Reclaim};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Maybe

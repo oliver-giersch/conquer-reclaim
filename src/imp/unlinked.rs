@@ -7,7 +7,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::retired::Retired;
-use crate::traits::{GlobalReclaim, Reclaim};
+use crate::traits::Reclaim;
 
 use crate::Unlinked;
 
@@ -25,16 +25,8 @@ impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
     impl_common!();
 
     #[inline]
-    pub fn into_retired(self) -> Retired<R>
-    where
-        T: 'static,
-    {
-        unsafe { self.into_retired_unchecked() }
-    }
-
-    #[inline]
-    pub unsafe fn into_retired_unchecked(self) -> Retired<R> {
-        Retired::new_unchecked(self.inner.decompose_non_null())
+    pub fn into_retired(self) -> Retired<T, R> {
+        unsafe { Retired::new_unchecked(self.inner.decompose_non_null()) }
     }
 
     #[inline]
@@ -56,21 +48,6 @@ impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
     #[inline]
     pub unsafe fn cast<U>(self) -> Unlinked<U, R, N> {
         Unlinked { inner: self.inner.cast(), _marker: PhantomData }
-    }
-}
-
-impl<T, R: GlobalReclaim, N: Unsigned> Unlinked<T, R, N> {
-    #[inline]
-    pub unsafe fn retire(self)
-    where
-        T: 'static,
-    {
-        self.retire_unchecked()
-    }
-
-    #[inline]
-    pub unsafe fn retire_unchecked(self) {
-        R::retire_record(self.into_retired_unchecked())
     }
 }
 

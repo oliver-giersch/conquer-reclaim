@@ -16,7 +16,7 @@ cfg_if::cfg_if! {
 use conquer_pointer::MarkedPtr;
 
 use crate::typenum::U0;
-use crate::{GlobalReclaim, LocalState, Maybe, Reclaim};
+use crate::{LocalState, Maybe, Reclaim};
 
 type Atomic<T, R> = crate::Atomic<T, R, U0>;
 type Owned<T, R> = crate::Owned<T, R, U0>;
@@ -56,7 +56,7 @@ impl<T, R: Reclaim> Clone for ArcStack<T, R> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim> ArcStack<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> ArcStack<T, R> {
     #[inline]
     pub fn new() -> Self {
         let inner = Arc::new(Stack::<_, R>::new());
@@ -95,7 +95,7 @@ impl<T, R: Reclaim> ArcStack<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim> Default for ArcStack<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> Default for ArcStack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -135,7 +135,7 @@ pub struct Stack<T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim> Stack<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> Stack<T, R> {
     const RELEASE_CAS: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
@@ -168,7 +168,7 @@ impl<T, R: Reclaim> Stack<T, R> {
             let next = shared.as_ref().next.load_unprotected(Relaxed).assume_storable();
             if let Ok(unlinked) = self.head.compare_exchange_weak(shared, next, Self::RELEASE_CAS) {
                 let elem = unlinked.take(|node| &node.elem);
-                local_state.retire_record(unlinked.into_retired_unchecked());
+                local_state.retire_record(unlinked.into_retired());
                 return Some(elem);
             }
         }
@@ -177,18 +177,9 @@ impl<T, R: Reclaim> Stack<T, R> {
     }
 }
 
-// for global reclaimer, TLS refs can be trivially instantiated from thread-local static variables,
-// so a specialization impl helps avoiding the requirement to first create a `StackRef` instance.
-impl<T, R: GlobalReclaim> Stack<T, R> {
-    #[inline]
-    pub fn pop(&self) -> Option<T> {
-        unsafe { self.pop_unchecked(&<R as GlobalReclaim>::build_local_state()) }
-    }
-}
-
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim> Default for Stack<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> Default for Stack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -252,7 +243,7 @@ pub struct StackRef<'s, T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'s, T, R: Reclaim> StackRef<'s, T, R> {
+impl<'s, T, R: Reclaim<Item = Node<T, R>>> StackRef<'s, T, R> {
     #[inline]
     pub fn new(stack: &'s Stack<T, R>) -> Self {
         Self { stack, reclaimer_local_state: unsafe { stack.reclaimer.build_local_state() } }
@@ -306,7 +297,7 @@ impl<T, R: Reclaim> Drop for IntoIter<T, R> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A node type for storing a [`Stack`]'s individual elements.
-struct Node<T, R: Reclaim> {
+pub struct Node<T, R: Reclaim> {
     /// The node's element, which is only ever dropped as part of a node when a
     /// non-empty [`Stack`] itself is dropped.
     elem: ManuallyDrop<T>,

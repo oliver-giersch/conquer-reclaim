@@ -12,7 +12,7 @@ use crate::traits::Reclaim;
 ///
 /// This struct guarantees the layout of its fields to match the declaration
 /// order, i.e., the `header` always precedes the `data`.
-#[derive(Debug, Default, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Default, Copy, Clone)]
 #[repr(C)]
 pub struct Record<T, R: Reclaim> {
     /// The record's header
@@ -28,12 +28,6 @@ impl<T, R: Reclaim> Record<T, R> {
     #[inline]
     pub fn new(data: T) -> Self {
         Self { header: R::Header::default(), data }
-    }
-
-    /// Creates a new [`Record`] with the specified `header` and `data`.
-    #[inline]
-    pub fn with_header(header: R::Header, data: T) -> Self {
-        Self { header, data }
     }
 
     /// Returns the pointer to the [`Record`] containing the value pointed to by

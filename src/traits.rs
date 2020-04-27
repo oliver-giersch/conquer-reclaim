@@ -4,30 +4,15 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
 use crate::atomic::Atomic;
-use crate::retired::Retired;
+use crate::retired::AssocRetired;
 use crate::{NotEqual, Protected};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// GlobalReclaim (trait)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub unsafe trait GlobalReclaim: Reclaim {
-    fn build_guard() -> <Self::LocalState as LocalState>::Guard {
-        <Self as GlobalReclaim>::build_local_state().build_guard()
-    }
-
-    unsafe fn retire_record(retired: Retired<Self>) {
-        <Self as GlobalReclaim>::build_local_state().retire_record(retired)
-    }
-
-    fn build_local_state() -> Self::LocalState;
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Reclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub trait Reclaim: Default + Send + Sync + Sized + 'static {
+    type Item: Sized;
     type Header: Default + Sized;
     type LocalState: LocalState<Reclaimer = Self> + 'static;
 
@@ -55,7 +40,12 @@ pub unsafe trait LocalState: Sized {
 
     /// Creates a new guard instance.
     fn build_guard(&self) -> Self::Guard;
-    unsafe fn retire_record(&self, retired: Retired<Self::Reclaimer>);
+    /// Retires the given record.
+    ///
+    /// # Safety
+    ///
+    /// TODO
+    unsafe fn retire_record(&self, retired: AssocRetired<Self::Reclaimer>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

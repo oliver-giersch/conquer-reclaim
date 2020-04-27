@@ -19,28 +19,62 @@ use crate::record::Record;
 use crate::traits::Reclaim;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// AssocRetired (type alias)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub type AssocRetired<R> = Retired<<R as Reclaim>::Item, R>;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Erased
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct Erased;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // Retired
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Retired<R> {
-    raw: RetiredPtr,
+pub struct Retired<T, R> {
+    ptr: NonNull<T>,
     _marker: PhantomData<R>,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<R: Reclaim + 'static> Retired<R> {
+impl<T, R: Reclaim> Retired<T, R> {
     #[inline]
-    pub fn as_raw(&self) -> &RetiredPtr {
-        &self.raw
+    pub unsafe fn reclaim(&mut self) {
+        let record: *mut Record<T, R> = Record::ptr_from_data(self.ptr.as_ptr());
+        mem::drop(Box::from_raw(record));
     }
 
+    /// Creates a new [`Retired`] from a raw non-`null` pointer.
+    ///
+    /// # Safety
+    ///
+    /// todo..
+    #[inline]
+    pub(crate) unsafe fn new_unchecked(ptr: NonNull<T>) -> Self {
+        Self { ptr, _marker: PhantomData }
+    }
+}
+
+/********** impl inherent *************************************************************************/
+
+impl<T, R: Reclaim> Retired<T, R> {
+    /*#[inline]
+    pub fn as_raw(&self) -> &RetiredPtr {
+        &self.raw
+    }*/
+
+    /*
     /// Returns the raw pointer to the retired record.
     #[inline]
     pub fn into_raw(self) -> RetiredPtr {
         self.raw
-    }
+    }*/
 
+    /*
     /// Creates a new [`Retired`] from a raw non-`null` pointer.
     ///
     /// # Safety
@@ -52,7 +86,7 @@ impl<R: Reclaim + 'static> Retired<R> {
         let any: NonNull<dyn AnyRecord> = NonNull::new_unchecked(record);
 
         Self { raw: RetiredPtr { ptr: mem::transmute(any) }, _marker: PhantomData }
-    }
+    }*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

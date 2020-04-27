@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
 use conquer_util::align::Aligned128 as CacheLineAligned;
 
-use crate::{GlobalReclaim, LocalState, Owned, Reclaim};
+use crate::{LocalState, Owned, Reclaim};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 
@@ -27,7 +27,7 @@ pub struct Queue<T, R: Reclaim> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim> Queue<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> Queue<T, R> {
     /// The list consists of linked array nodes and this constant defines the
     /// size of each array.
     pub const NODE_SIZE: usize = NODE_SIZE;
@@ -128,7 +128,7 @@ impl<T, R: Reclaim> Queue<T, R> {
                 if let Ok(unlinked) =
                     self.head().compare_exchange(head, next.assume_storable(), Self::REL_RLX)
                 {
-                    local_state.retire_record(unlinked.into_retired_unchecked());
+                    local_state.retire_record(unlinked.into_retired());
                 }
             }
         }
@@ -145,32 +145,6 @@ impl<T, R: Reclaim> Queue<T, R> {
     }
 }
 
-impl<T, R: GlobalReclaim> Queue<T, R> {
-    /// Returns `true` if the queue is empty.
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        unsafe { self.is_empty_unchecked(&Self::local_state()) }
-    }
-
-    /// Pushes `elem` to the tail of the queue.
-    #[inline]
-    pub fn push(&self, elem: T) {
-        unsafe { self.push_unchecked(elem, &Self::local_state()) };
-    }
-
-    /// Pops an element from the head of the queue and returns it or `None`, if
-    /// the queue is empty.
-    #[inline]
-    pub fn pop(&self, elem: T) {
-        unsafe { self.pop_unchecked(&Self::local_state()) };
-    }
-
-    #[inline]
-    fn local_state() -> R::LocalState {
-        <R as GlobalReclaim>::build_local_state()
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // QueueRef
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -182,7 +156,7 @@ pub struct QueueRef<'q, T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: Reclaim> QueueRef<'q, T, R> {
+impl<'q, T, R: Reclaim<Item = Node<T, R>>> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
         Self { queue, reclaim_local_state: unsafe { queue.reclaimer.build_local_state() } }
@@ -213,7 +187,7 @@ impl<'q, T, R: Reclaim> QueueRef<'q, T, R> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[repr(C)]
-struct Node<T, R: Reclaim> {
+pub struct Node<T, R: Reclaim> {
     pop_idx: AtomicU32,
     slots: [Slot<T>; NODE_SIZE],
     push_idx: AtomicU32,

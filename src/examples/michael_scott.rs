@@ -44,7 +44,7 @@ impl<T, R: Reclaim> Clone for ArcQueue<T, R> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim> ArcQueue<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> ArcQueue<T, R> {
     #[inline]
     pub fn new() -> Self {
         let inner = Arc::new(Queue::<_, R>::new());
@@ -65,7 +65,7 @@ impl<T, R: Reclaim> ArcQueue<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim> Default for ArcQueue<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> Default for ArcQueue<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -110,7 +110,7 @@ pub struct Queue<T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim> Queue<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> Queue<T, R> {
     const REL_RLX: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
@@ -160,7 +160,7 @@ impl<T, R: Reclaim> Queue<T, R> {
                     // safety: The previous head is no longer visible for other threads and since
                     // `elem` won't be dropped when the node is reclaimed it doesn't matter if it
                     // outlives any internal references.
-                    local_state.retire_record(unlinked.into_retired_unchecked());
+                    local_state.retire_record(unlinked.into_retired());
 
                     return res;
                 }
@@ -175,7 +175,7 @@ impl<T, R: Reclaim> Queue<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim> Default for Queue<T, R> {
+impl<T, R: Reclaim<Item = Node<T, R>>> Default for Queue<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -212,7 +212,7 @@ pub struct QueueRef<'q, T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: Reclaim> QueueRef<'q, T, R> {
+impl<'q, T, R: Reclaim<Item = Node<T, R>>> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
         Self { queue, reclaimer_local_state: unsafe { queue.reclaimer.build_local_state() } }
@@ -233,7 +233,7 @@ impl<'q, T, R: Reclaim> QueueRef<'q, T, R> {
 // Node
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-struct Node<T, R> {
+pub struct Node<T, R> {
     elem: MaybeUninit<T>,
     next: Atomic<Self, R>,
 }
