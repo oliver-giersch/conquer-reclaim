@@ -11,7 +11,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{AtomicMarkedPtr, MarkedNonNull, MarkedPtr, Null};
 
 use crate::traits::{Protect, Reclaim};
-use crate::{Maybe, NotEqual, Owned, Protected, Unlinked, Unprotected};
+use crate::{Maybe, NotEqual, Owned, Protected, Retire, Unlinked, Unprotected};
 
 pub use self::compare::Comparable;
 pub use self::store::Storable;
@@ -151,41 +151,6 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
         Unprotected { inner: self.load_raw(order), _marker: PhantomData }
     }
 
-    /// Loads a value from the pointer using `guard` to protect it from
-    /// reclamation.
-    ///
-    /// If the loaded value is non-null, the value is guaranteed to be protected
-    /// from reclamation during the lifetime of `guard`.
-    ///
-    /// `load` takes an [`Ordering`][ordering] argument, which describes the
-    /// memory ordering of this operation.
-    ///
-    /// # Panics
-    ///
-    /// *May* panic if `order` is [`Release`][release] or [`AcqRel`][acq_rel].
-    ///
-    /// [release]: Ordering::Release
-    /// [acq_rel]: Ordering::AcqRel
-    #[inline]
-    pub fn load<'g>(
-        &self,
-        guard: &'g mut impl Protect<Reclaimer = R>,
-        order: Ordering,
-    ) -> Protected<'g, T, R, N> {
-        guard.protect(self, order)
-    }
-
-    /// TODO: docs...
-    #[inline]
-    pub fn load_if_equal<'g>(
-        &self,
-        expected: MarkedPtr<T, N>,
-        guard: &'g mut impl Protect<Reclaimer = R>,
-        order: Ordering,
-    ) -> Result<Protected<'g, T, R, N>, NotEqual> {
-        guard.protect_if_equal(self, expected, order)
-    }
-
     /// Stores either `null` or a valid pointer to an owned heap allocated value
     /// into the pointer.
     ///
@@ -236,6 +201,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
         }
     }
 
+    /// TODO: docs...
     #[inline]
     pub fn compare_exchange<C, S>(
         &self,
@@ -261,6 +227,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
         }
     }
 
+    /// TODO: docs...
     #[inline]
     pub fn compare_exchange_weak<C, S>(
         &self,
@@ -296,6 +263,43 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
             ptr if ptr == expected => Ok(ptr),
             _ => Err(NotEqual),
         }
+    }
+}
+
+impl<T, R: Reclaim + Retire<T>, N: Unsigned> Atomic<T, R, N> {
+    /// Loads a value from the pointer using `guard` to protect it from
+    /// reclamation.
+    ///
+    /// If the loaded value is non-null, the value is guaranteed to be protected
+    /// from reclamation during the lifetime of `guard`.
+    ///
+    /// `load` takes an [`Ordering`][ordering] argument, which describes the
+    /// memory ordering of this operation.
+    ///
+    /// # Panics
+    ///
+    /// *May* panic if `order` is [`Release`][release] or [`AcqRel`][acq_rel].
+    ///
+    /// [release]: Ordering::Release
+    /// [acq_rel]: Ordering::AcqRel
+    #[inline]
+    pub fn load<'g>(
+        &self,
+        guard: &'g mut impl Protect<Reclaimer = R>,
+        order: Ordering,
+    ) -> Protected<'g, T, R, N> {
+        guard.protect(self, order)
+    }
+
+    /// TODO: docs...
+    #[inline]
+    pub fn load_if_equal<'g>(
+        &self,
+        expected: MarkedPtr<T, N>,
+        guard: &'g mut impl Protect<Reclaimer = R>,
+        order: Ordering,
+    ) -> Result<Protected<'g, T, R, N>, NotEqual> {
+        guard.protect_if_equal(self, expected, order)
     }
 }
 

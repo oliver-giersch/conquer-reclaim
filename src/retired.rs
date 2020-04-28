@@ -3,7 +3,6 @@
 
 use core::cmp;
 use core::fmt;
-use core::marker::PhantomData;
 use core::mem;
 use core::ptr::NonNull;
 
@@ -16,199 +15,52 @@ cfg_if::cfg_if! {
 }
 
 use crate::record::Record;
-use crate::traits::Reclaim;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// AssocRetired (type alias)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub type AssocRetired<R> = Retired<<R as Reclaim>::Item, R>;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Erased
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub struct Erased;
+use crate::strategy::{DropCtx, Erased};
+use crate::traits::{AssocItem, Reclaim, ReclaimStrategy};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Retired
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Retired<T, R> {
-    ptr: NonNull<T>,
-    _marker: PhantomData<R>,
+pub struct Retired<R: Reclaim> {
+    ptr: NonNull<AssocItem<R>>,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim> Retired<T, R> {
+impl<R: Reclaim> Retired<R> {
     #[inline]
-    pub unsafe fn reclaim(&mut self) {
-        let record: *mut Record<T, R> = Record::ptr_from_data(self.ptr.as_ptr());
-        mem::drop(Box::from_raw(record));
+    pub fn as_ptr(&self) -> *mut AssocItem<R> {
+        self.ptr.as_ptr()
     }
 
-    /// Creates a new [`Retired`] from a raw non-`null` pointer.
+    #[inline]
+    pub fn header(&self) -> *mut R::Header {
+        todo!()
+    }
+
+    #[inline]
+    pub unsafe fn reclaim(&mut self) {
+        let retired = self.ptr.as_ptr();
+        <R::Strategy as ReclaimStrategy>::reclaim(retired);
+    }
+
+    /// Creates a new [`Retired`] from a raw non-null pointer.
     ///
     /// # Safety
     ///
     /// todo..
     #[inline]
-    pub(crate) unsafe fn new_unchecked(ptr: NonNull<T>) -> Self {
-        Self { ptr, _marker: PhantomData }
+    pub(crate) unsafe fn new_unchecked(ptr: *mut AssocItem<R>) -> Self {
+        Self { ptr: NonNull::new_unchecked(ptr) }
     }
 }
 
-/********** impl inherent *************************************************************************/
-
-impl<T, R: Reclaim> Retired<T, R> {
-    /*#[inline]
-    pub fn as_raw(&self) -> &RetiredPtr {
-        &self.raw
-    }*/
-
-    /*
-    /// Returns the raw pointer to the retired record.
-    #[inline]
-    pub fn into_raw(self) -> RetiredPtr {
-        self.raw
-    }*/
-
-    /*
-    /// Creates a new [`Retired`] from a raw non-`null` pointer.
-    ///
-    /// # Safety
-    ///
-    /// todo..
-    #[inline]
-    pub(crate) unsafe fn new_unchecked<'a, T: 'a>(ptr: NonNull<T>) -> Self {
-        let record = Record::<T, R>::ptr_from_data(ptr.as_ptr());
-        let any: NonNull<dyn AnyRecord> = NonNull::new_unchecked(record);
-
-        Self { raw: RetiredPtr { ptr: mem::transmute(any) }, _marker: PhantomData }
-    }*/
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// RetiredPtr
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// A type-erased, non-`null` fat pointer to a retired record.
-pub struct RetiredPtr {
-    ptr: NonNull<dyn AnyRecord + 'static>,
-}
-
-/********** impl inherent *************************************************************************/
-
-impl RetiredPtr {
-    /// Converts a retired record to a raw pointer.
-    ///
-    /// Since retired records are type-erased trait object (fat) pointers to
-    /// retired values that should no longer be used, only the 'address' part
-    /// of the pointer is returned, i.e. a pointer to an `()`.
-    #[inline]
-    pub fn as_ptr(&self) -> *const () {
-        self.ptr.as_ptr() as *mut () as *const ()
-    }
-
-    /// Returns the numeric representation of the retired record's memory
-    /// address.
-    #[inline]
-    pub fn address(&self) -> usize {
-        self.ptr.as_ptr() as *mut () as usize
-    }
-
-    /// Returns the offset (in bytes) from the pointer to the retired [`Record`]
-    /// to the records data.
-    #[inline]
-    pub fn offset_data(&self) -> usize {
-        unsafe { self.ptr.as_ref().offset_data() }
-    }
-
-    /// Returns the (type-erased) pointer to the [`data`][Record::data] field of
-    /// the retired record.
-    #[inline]
-    pub fn data_ptr(&self) -> *const () {
-        (self.address() + self.offset_data()) as _
-    }
-
-    /// Reclaims the retired record by dropping it and de-allocating its memory.
-    ///
-    /// # Safety
-    ///
-    /// This method **must** not be called more than once or when some other
-    /// thread or scope still has some reference to the record.
-    #[inline]
-    pub unsafe fn reclaim(&mut self) {
-        mem::drop(Box::from_raw(self.ptr.as_ptr()));
-    }
-}
-
-/********** impl PartialEq ************************************************************************/
-
-impl PartialEq for RetiredPtr {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.as_ptr().eq(&other.as_ptr())
-    }
-}
-
-/********** impl PartialOrd ***********************************************************************/
-
-impl PartialOrd for RetiredPtr {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.as_ptr().partial_cmp(&other.as_ptr())
-    }
-}
-
-/********** impl Ord ******************************************************************************/
-
-impl Ord for RetiredPtr {
-    #[inline]
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.as_ptr().cmp(&other.as_ptr())
-    }
-}
-
-/********** impl Eq *******************************************************************************/
-
-impl Eq for RetiredPtr {}
-
-/********** impl Debug ****************************************************************************/
-
-impl fmt::Debug for RetiredPtr {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Retired").field("address", &self.as_ptr()).finish()
-    }
-}
-
-/********** impl Pointer **************************************************************************/
-
-impl fmt::Pointer for RetiredPtr {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Pointer::fmt(&self.as_ptr(), f)
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// AnyRecord (trait)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// A trait like [`Any`][core::any::Any] but without the `'static` bound that
-/// does not allow down-casting and is mainly useful for ensuring that the
-/// correct `Drop` code is run when dropping an `Box<dyn Any>`.
-trait AnyRecord {
-    fn offset_data(&self) -> usize;
-}
-
-/********** blanket impl for record types *********************************************************/
-
-impl<H, R: Reclaim> AnyRecord for Record<H, R> {
-    #[inline]
-    fn offset_data(&self) -> usize {
-        Record::<H, R>::offset_data()
+impl<R: Reclaim<Strategy = Erased<R>>> Retired<R> {
+    pub fn data(&self) -> *mut () {
+        unsafe {
+            let drop_ctx: NonNull<DropCtx> = self.ptr.cast();
+            drop_ctx.as_ref().data
+        }
     }
 }

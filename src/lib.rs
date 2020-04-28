@@ -1,7 +1,7 @@
 //! TODO: crate lvl docs...
 
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)] todo: re-enable
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -17,12 +17,13 @@ mod macros;
 
 #[cfg(feature = "examples")]
 pub mod examples;
-//pub mod leak;
+//pub mod leak; // todo: re-enable
 
 mod atomic;
 mod imp;
 mod record;
 mod retired;
+mod strategy;
 mod traits;
 
 use core::marker::PhantomData;
@@ -35,9 +36,8 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
-pub use crate::record::Record;
-pub use crate::retired::{Retired, RetiredPtr};
-pub use crate::traits::{LocalState, Protect, Reclaim};
+pub use crate::retired::Retired;
+pub use crate::traits::{LocalState, Protect, Reclaim, Retire};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Maybe

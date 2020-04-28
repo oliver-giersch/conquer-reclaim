@@ -4,19 +4,50 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
 use crate::atomic::Atomic;
-use crate::retired::AssocRetired;
-use crate::{NotEqual, Protected};
+use crate::{NotEqual, Protected, Retired};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// AssocItem
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub type AssocItem<R> = <<R as Reclaim>::Strategy as ReclaimStrategy>::Item;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// GlobalReclaim (trait)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub unsafe trait GlobalReclaim: Reclaim {
+    fn build_guard() -> <Self::LocalState as LocalState>::Guard {
+        <Self as GlobalReclaim>::build_local_state().build_guard()
+    }
+
+    unsafe fn retire_record(retired: Retired<Self>) {
+        <Self as GlobalReclaim>::build_local_state().retire_record(retired)
+    }
+
+    fn build_local_state() -> Self::LocalState;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Reclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub trait Reclaim: Default + Send + Sync + Sized + 'static {
-    type Item: Sized;
     type Header: Default + Sized;
     type LocalState: LocalState<Reclaimer = Self> + 'static;
+    type Strategy: ReclaimStrategy;
 
     unsafe fn build_local_state(&self) -> Self::LocalState;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Retire (trait)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// A trait that signifies that an implementing [`Reclaim`] mechanism is capable
+/// of retiring instances of type `T`.
+pub unsafe trait Retire<T>: Reclaim {
+    unsafe fn convert(retired: *mut T) -> *mut AssocItem<Self>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,7 +76,7 @@ pub unsafe trait LocalState: Sized {
     /// # Safety
     ///
     /// TODO
-    unsafe fn retire_record(&self, retired: AssocRetired<Self::Reclaimer>);
+    unsafe fn retire_record(&self, retired: Retired<Self::Reclaimer>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -66,7 +97,9 @@ pub unsafe trait Protect: Clone {
         &mut self,
         atomic: &Atomic<T, Self::Reclaimer, N>,
         order: Ordering,
-    ) -> Protected<T, Self::Reclaimer, N>;
+    ) -> Protected<T, Self::Reclaimer, N>
+    where
+        Self::Reclaimer: Retire<T>;
 
     /// Loads and protects the value currently stored in `src` if it equals the
     /// `expected` value and returns a protected [`Shared`] pointer to it.
@@ -77,5 +110,18 @@ pub unsafe trait Protect: Clone {
         atomic: &Atomic<T, Self::Reclaimer, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<Protected<T, Self::Reclaimer, N>, NotEqual>;
+    ) -> Result<Protected<T, Self::Reclaimer, N>, NotEqual>
+    where
+        Self::Reclaimer: Retire<T>;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// ReclaimStrategy (sealed trait)
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub trait ReclaimStrategy {
+    type DropCtx: Default + Sized;
+    type Item: Sized;
+
+    unsafe fn reclaim(retired: *mut Self::Item);
 }

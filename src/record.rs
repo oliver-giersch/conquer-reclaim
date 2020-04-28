@@ -1,6 +1,6 @@
 use core::mem;
 
-use crate::traits::Reclaim;
+use crate::traits::{Reclaim, ReclaimStrategy};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Record
@@ -12,9 +12,9 @@ use crate::traits::Reclaim;
 ///
 /// This struct guarantees the layout of its fields to match the declaration
 /// order, i.e., the `header` always precedes the `data`.
-#[derive(Default, Copy, Clone)]
 #[repr(C)]
-pub struct Record<T, R: Reclaim> {
+pub(crate) struct Record<T, R: Reclaim> {
+    pub drop_ctx: <R::Strategy as ReclaimStrategy>::DropCtx,
     /// The record's header
     pub header: R::Header,
     /// The wrapped record data itself.
@@ -27,7 +27,7 @@ impl<T, R: Reclaim> Record<T, R> {
     /// Creates a new [`Record`] with the specified `data` and a default header.
     #[inline]
     pub fn new(data: T) -> Self {
-        Self { header: R::Header::default(), data }
+        Self { drop_ctx: Default::default(), header: R::Header::default(), data }
     }
 
     /// Returns the pointer to the [`Record`] containing the value pointed to by
@@ -57,7 +57,7 @@ impl<T, R: Reclaim> Record<T, R> {
     /// Returns the offset in bytes from the address of a [`Record`] to its
     /// [`data`][Record::data] field.
     #[inline]
-    pub fn offset_data() -> usize {
+    fn offset_data() -> usize {
         record_header_to_data_offset::<R::Header, T>()
     }
 }

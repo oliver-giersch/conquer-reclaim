@@ -10,7 +10,7 @@ cfg_if::cfg_if! {
     }
 }
 
-use crate::{LocalState, Maybe, Reclaim};
+use crate::{LocalState, Maybe, Reclaim, Retire};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
@@ -30,7 +30,7 @@ unsafe impl<T, R: Reclaim> Send for ArcQueue<T, R> {}
 
 /*********** impl Clone ***************************************************************************/
 
-impl<T, R: Reclaim> Clone for ArcQueue<T, R> {
+impl<T, R: Reclaim + Retire<Node<T, R>>> Clone for ArcQueue<T, R> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
@@ -44,7 +44,7 @@ impl<T, R: Reclaim> Clone for ArcQueue<T, R> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> ArcQueue<T, R> {
+impl<T, R: Reclaim + Retire<Node<T, R>>> ArcQueue<T, R> {
     #[inline]
     pub fn new() -> Self {
         let inner = Arc::new(Queue::<_, R>::new());
@@ -65,7 +65,7 @@ impl<T, R: Reclaim<Item = Node<T, R>>> ArcQueue<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> Default for ArcQueue<T, R> {
+impl<T, R: Reclaim + Retire<Node<T, R>>> Default for ArcQueue<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -84,7 +84,7 @@ impl<T, R: Reclaim> Drop for ArcQueue<T, R> {
 
 /********** impl From (Stack) *********************************************************************/
 
-impl<T, R: Reclaim> From<Queue<T, R>> for ArcQueue<T, R> {
+impl<T, R: Reclaim + Retire<Node<T, R>>> From<Queue<T, R>> for ArcQueue<T, R> {
     #[inline]
     fn from(queue: Queue<T, R>) -> Self {
         let inner = Arc::new(queue);
@@ -110,7 +110,7 @@ pub struct Queue<T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> Queue<T, R> {
+impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
     const REL_RLX: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
@@ -175,7 +175,7 @@ impl<T, R: Reclaim<Item = Node<T, R>>> Queue<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> Default for Queue<T, R> {
+impl<T, R: Reclaim + Retire<Node<T, R>>> Default for Queue<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -212,7 +212,7 @@ pub struct QueueRef<'q, T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: Reclaim<Item = Node<T, R>>> QueueRef<'q, T, R> {
+impl<'q, T, R: Reclaim + Retire<Node<T, R>>> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
         Self { queue, reclaimer_local_state: unsafe { queue.reclaimer.build_local_state() } }

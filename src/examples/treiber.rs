@@ -16,7 +16,7 @@ cfg_if::cfg_if! {
 use conquer_pointer::MarkedPtr;
 
 use crate::typenum::U0;
-use crate::{LocalState, Maybe, Reclaim};
+use crate::{LocalState, Maybe, Reclaim, Retire};
 
 type Atomic<T, R> = crate::Atomic<T, R, U0>;
 type Owned<T, R> = crate::Owned<T, R, U0>;
@@ -56,14 +56,16 @@ impl<T, R: Reclaim> Clone for ArcStack<T, R> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> ArcStack<T, R> {
+impl<T, R: Reclaim> ArcStack<T, R> {
     #[inline]
     pub fn new() -> Self {
         let inner = Arc::new(Stack::<_, R>::new());
         let reclaim_local_state = unsafe { inner.reclaimer.build_local_state() };
         Self { inner, reclaim_local_state: ManuallyDrop::new(reclaim_local_state) }
     }
+}
 
+impl<T, R: Reclaim + Retire<Node<T, R>>> ArcStack<T, R> {
     #[inline]
     pub fn push(&self, elem: T) {
         self.inner.push(elem)
@@ -95,7 +97,7 @@ impl<T, R: Reclaim<Item = Node<T, R>>> ArcStack<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> Default for ArcStack<T, R> {
+impl<T, R: Reclaim> Default for ArcStack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -135,13 +137,15 @@ pub struct Stack<T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> Stack<T, R> {
-    const RELEASE_CAS: (Ordering, Ordering) = (Release, Relaxed);
-
+impl<T, R: Reclaim> Stack<T, R> {
     #[inline]
     pub fn new() -> Self {
         Self { head: Atomic::null(), reclaimer: R::default() }
     }
+}
+
+impl<T, R: Reclaim + Retire<Node<T, R>>> Stack<T, R> {
+    const RELEASE_CAS: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
     pub fn push(&self, elem: T) {
@@ -179,7 +183,7 @@ impl<T, R: Reclaim<Item = Node<T, R>>> Stack<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> Default for Stack<T, R> {
+impl<T, R: Reclaim> Default for Stack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -243,7 +247,7 @@ pub struct StackRef<'s, T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'s, T, R: Reclaim<Item = Node<T, R>>> StackRef<'s, T, R> {
+impl<'s, T, R: Reclaim + Retire<Node<T, R>>> StackRef<'s, T, R> {
     #[inline]
     pub fn new(stack: &'s Stack<T, R>) -> Self {
         Self { stack, reclaimer_local_state: unsafe { stack.reclaimer.build_local_state() } }

@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
 use conquer_util::align::Aligned128 as CacheLineAligned;
 
-use crate::{LocalState, Owned, Reclaim};
+use crate::{LocalState, Owned, Reclaim, Retire};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 
@@ -27,7 +27,7 @@ pub struct Queue<T, R: Reclaim> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim<Item = Node<T, R>>> Queue<T, R> {
+impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
     /// The list consists of linked array nodes and this constant defines the
     /// size of each array.
     pub const NODE_SIZE: usize = NODE_SIZE;
@@ -156,7 +156,7 @@ pub struct QueueRef<'q, T, R: Reclaim> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: Reclaim<Item = Node<T, R>>> QueueRef<'q, T, R> {
+impl<'q, T, R: Reclaim + Retire<Node<T, R>>> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
         Self { queue, reclaim_local_state: unsafe { queue.reclaimer.build_local_state() } }
