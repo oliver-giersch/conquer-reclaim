@@ -177,23 +177,8 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
         unsafe { owned.inner.decompose_mut() }
     }
 
-    /// Consumes and leaks the `Owned`, returning a mutable reference
-    /// `&'a mut T` and the decomposed tag.
-    /// Note that the type `T` must outlive the chosen lifetime `'a`.
-    /// If the type has only static references, or none at all, then this may
-    /// chosen to be `'static`.
     #[inline]
-    pub fn leak<'a>(owned: Self) -> (&'a mut T, usize)
-    where
-        T: 'a,
-    {
-        let (ptr, tag) = owned.inner.decompose();
-        mem::forget(owned);
-        unsafe { (&mut *ptr.as_ptr(), tag) }
-    }
-
-    #[inline]
-    pub fn leak_storable(owned: Self) -> Storable<T, R, N> {
+    pub fn leak(owned: Self) -> Storable<T, R, N> {
         let inner = owned.inner.into();
         mem::forget(owned);
         Storable::new(inner)

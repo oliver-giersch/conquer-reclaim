@@ -115,7 +115,7 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
 
     #[inline]
     pub fn new() -> Self {
-        let sentinel = Owned::leak_storable(Owned::new(Node::sentinel()));
+        let sentinel = Owned::leak(Owned::new(Node::sentinel()));
         Self {
             head: Atomic::from(sentinel),
             tail: Atomic::from(sentinel),
@@ -125,7 +125,7 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
 
     #[inline]
     pub unsafe fn push_unchecked(&self, elem: T, local_state: &R::LocalState) {
-        let node = Owned::leak_storable(Owned::new(Node::new(elem)));
+        let node = Owned::leak(Owned::new(Node::new(elem)));
         let mut guard = local_state.build_guard();
         loop {
             let tail = self.tail.load(&mut guard, Acquire);

@@ -36,7 +36,7 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
     /// Creates a new empty queue.
     #[inline]
     pub fn new() -> Self {
-        let node = Owned::leak_storable(Owned::new(Node::new()));
+        let node = Owned::leak(Owned::new(Node::new()));
         Self {
             head: CacheLineAligned::new(Atomic::from(node)),
             tail: CacheLineAligned::new(Atomic::from(node)),
@@ -82,7 +82,7 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
 
                 let next = tail.as_ref().next.load_unprotected(Ordering::Acquire);
                 if next.is_null() {
-                    let node = Owned::leak_storable(Owned::new(Node::with_tentative(&elem)));
+                    let node = Owned::leak(Owned::new(Node::with_tentative(&elem)));
                     if tail.as_ref().next.compare_exchange(next, node, Self::REL_RLX).is_ok() {
                         let _ = self.tail().compare_exchange(tail, node, Self::REL_RLX);
                         return;
