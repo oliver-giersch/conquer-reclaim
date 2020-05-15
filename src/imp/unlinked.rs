@@ -7,7 +7,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::retired::Retired;
-use crate::traits::{AssocItem, Reclaim, Retire};
+use crate::traits::{Reclaim, Retire};
 
 use crate::Unlinked;
 
@@ -17,7 +17,7 @@ impl<T, R: Reclaim + Retire<T>, N: Unsigned> Unlinked<T, R, N> {
     #[inline]
     pub fn into_retired(self) -> Retired<R> {
         let ptr = self.inner.decompose_non_null();
-        unsafe { Retired::new_unchecked(R::convert(ptr.as_ptr())) }
+        unsafe { Retired::new_unchecked(R::retire(ptr.as_ptr())) }
     }
 }
 

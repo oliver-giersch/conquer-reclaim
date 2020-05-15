@@ -2,7 +2,7 @@ use core::borrow::{Borrow, BorrowMut};
 use core::convert::{AsMut, AsRef};
 use core::fmt;
 use core::marker::PhantomData;
-use core::mem;
+use core::mem::{self, ManuallyDrop};
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 
@@ -18,7 +18,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::atomic::Storable;
-use crate::record::Record;
+use crate::record::AssocRecord;
 use crate::traits::Reclaim;
 use crate::Owned;
 
@@ -92,24 +92,22 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
     #[inline]
     #[allow(clippy::wrong_self_convention)]
     pub fn into_inner(owned: Self) -> T {
-        let boxed: Box<Record<_, _>> = owned.into();
+        let boxed: Box<AssocRecord<_, R>> = owned.into();
         (*boxed).data
     }
 
     #[inline]
     #[allow(clippy::wrong_self_convention)]
     pub fn into_marked_ptr(owned: Self) -> MarkedPtr<T, N> {
-        let ptr = owned.inner.into_marked_ptr();
-        mem::forget(owned);
-        ptr
+        let owned = ManuallyDrop::new(owned);
+        owned.inner.into_marked_ptr()
     }
 
     #[inline]
     #[allow(clippy::wrong_self_convention)]
     pub fn into_marked_non_null(owned: Self) -> MarkedNonNull<T, N> {
-        let ptr = owned.inner;
-        mem::forget(owned);
-        ptr
+        let owned = ManuallyDrop::new(owned);
+        owned.inner
     }
 
     #[inline]
@@ -125,18 +123,14 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
 
     #[inline]
     pub fn clear_tag(owned: Self) -> Self {
-        let inner = owned.inner.clear_tag();
-        mem::forget(owned);
-
-        Self { inner, _marker: PhantomData }
+        let owned = ManuallyDrop::new(owned);
+        Self { inner: owned.inner.clear_tag(), _marker: PhantomData }
     }
 
     #[inline]
     pub fn set_tag(owned: Self, tag: usize) -> Self {
-        let inner = owned.inner.set_tag(tag);
-        mem::forget(owned);
-
-        Self { inner, _marker: PhantomData }
+        let owned = ManuallyDrop::new(owned);
+        Self { inner: owned.inner.set_tag(tag), _marker: PhantomData }
     }
 
     #[inline]
@@ -179,9 +173,8 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
 
     #[inline]
     pub fn leak(owned: Self) -> Storable<T, R, N> {
-        let inner = owned.inner.into();
-        mem::forget(owned);
-        Storable::new(inner)
+        let owned = ManuallyDrop::new(owned);
+        Storable::new(owned.inner.into())
     }
 
     #[inline]
@@ -196,7 +189,7 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
     /// wrapped value.
     #[inline]
     fn alloc_record(owned: T) -> NonNull<T> {
-        let record = Box::leak(Box::new(Record::<_, R>::new(owned)));
+        let record = Box::leak(Box::new(AssocRecord::<_, R>::new(owned)));
         NonNull::from(&record.data)
     }
 }
@@ -291,7 +284,7 @@ impl<T, R: Reclaim, N: Unsigned> Drop for Owned<T, R, N> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            let record = Record::<_, R>::ptr_from_data(self.inner.decompose_ptr());
+            let record = AssocRecord::<_, R>::ptr_from_data(self.inner.decompose_ptr());
             mem::drop(Box::from_raw(record));
         }
     }
@@ -308,11 +301,11 @@ impl<T, R: Reclaim, N: Unsigned> From<T> for Owned<T, R, N> {
 
 /********** impl From (Owned) for Box<Record<T, R>> ***********************************************/
 
-impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Box<Record<T, R>> {
+impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Box<AssocRecord<T, R>> {
     #[inline]
     fn from(owned: Owned<T, R, N>) -> Self {
         unsafe {
-            let record = Record::<_, R>::ptr_from_data(owned.inner.decompose_ptr());
+            let record = AssocRecord::<_, R>::ptr_from_data(owned.inner.decompose_ptr());
             Box::from_raw(record)
         }
     }

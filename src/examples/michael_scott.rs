@@ -10,7 +10,7 @@ cfg_if::cfg_if! {
     }
 }
 
-use crate::{LocalState, Maybe, Reclaim, Retire};
+use crate::{Maybe, ReclaimLocalState, ReclaimRef};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
@@ -19,18 +19,18 @@ type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
 // ArcQueue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct ArcQueue<T, R: Reclaim> {
+pub struct ArcQueue<T, R: ReclaimRef<Node<T, R>>> {
     inner: Arc<Queue<T, R>>,
     reclaim_local_state: ManuallyDrop<R::LocalState>,
 }
 
 /*********** impl Send ****************************************************************************/
 
-unsafe impl<T, R: Reclaim> Send for ArcQueue<T, R> {}
+unsafe impl<T, R: ReclaimRef<Node<T, R>>> Send for ArcQueue<T, R> {}
 
 /*********** impl Clone ***************************************************************************/
 
-impl<T, R: Reclaim + Retire<Node<T, R>>> Clone for ArcQueue<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcQueue<T, R> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
@@ -44,14 +44,23 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Clone for ArcQueue<T, R> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim + Retire<Node<T, R>>> ArcQueue<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> ArcQueue<T, R> {
     #[inline]
-    pub fn new() -> Self {
-        let inner = Arc::new(Queue::<_, R>::new());
+    pub fn with_reclaimer(reclaimer: R) -> Self {
+        let inner = Arc::new(Queue::<_, R>::with_reclaimer(reclaimer));
         let reclaim_local_state = unsafe { inner.reclaimer.build_local_state() };
         Self { inner, reclaim_local_state: ManuallyDrop::new(reclaim_local_state) }
     }
+}
 
+impl<T, R: ReclaimRef<Node<T, R>> + Default> ArcQueue<T, R> {
+    #[inline]
+    pub fn new() -> Self {
+        Self::with_reclaimer(Default::default())
+    }
+}
+
+impl<T, R: ReclaimRef<Node<T, R>>> ArcQueue<T, R> {
     #[inline]
     pub fn push(&self, elem: T) {
         unsafe { self.inner.push_unchecked(elem, &*self.reclaim_local_state) }
@@ -65,7 +74,7 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> ArcQueue<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim + Retire<Node<T, R>>> Default for ArcQueue<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for ArcQueue<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -74,7 +83,7 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Default for ArcQueue<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: Reclaim> Drop for ArcQueue<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Drop for ArcQueue<T, R> {
     #[inline]
     fn drop(&mut self) {
         // safety: Drop Local state before the `Arc`, because it may hold a pointer into it.
@@ -84,7 +93,7 @@ impl<T, R: Reclaim> Drop for ArcQueue<T, R> {
 
 /********** impl From (Stack) *********************************************************************/
 
-impl<T, R: Reclaim + Retire<Node<T, R>>> From<Queue<T, R>> for ArcQueue<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> From<Queue<T, R>> for ArcQueue<T, R> {
     #[inline]
     fn from(queue: Queue<T, R>) -> Self {
         let inner = Arc::new(queue);
@@ -102,26 +111,35 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> From<Queue<T, R>> for ArcQueue<T, R> {
 ///
 /// The implementation is based on an algorithm by Michael Scott and Maged
 /// Michael.
-pub struct Queue<T, R: Reclaim> {
-    head: Atomic<Node<T, R>, R>,
-    tail: Atomic<Node<T, R>, R>,
+pub struct Queue<T, R: ReclaimRef<Node<T, R>>> {
+    head: Atomic<Node<T, R>, R::Reclaim>,
+    tail: Atomic<Node<T, R>, R::Reclaim>,
     reclaimer: R,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
-    const REL_RLX: (Ordering, Ordering) = (Release, Relaxed);
-
+impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
     #[inline]
-    pub fn new() -> Self {
-        let sentinel = Owned::leak(Owned::new(Node::sentinel()));
+    pub fn with_reclaimer(reclaimer: R) -> Self {
+        let sentinel = Owned::<_, R::Reclaim>::leak(Owned::new(Node::sentinel()));
         Self {
-            head: Atomic::from(sentinel),
-            tail: Atomic::from(sentinel),
-            reclaimer: Default::default(),
+            head: Atomic::<_, R::Reclaim>::from(sentinel),
+            tail: Atomic::<_, R::Reclaim>::from(sentinel),
+            reclaimer,
         }
     }
+}
+
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Queue<T, R> {
+    #[inline]
+    pub fn new() -> Self {
+        Self::with_reclaimer(Default::default())
+    }
+}
+
+impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
+    const REL_RLX: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
     pub unsafe fn push_unchecked(&self, elem: T, local_state: &R::LocalState) {
@@ -175,7 +193,7 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim + Retire<Node<T, R>>> Default for Queue<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for Queue<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -184,7 +202,7 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Default for Queue<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: Reclaim> Drop for Queue<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Drop for Queue<T, R> {
     fn drop(&mut self) {
         unsafe {
             // safety: As long as tail is left in place, no node can be freed twice,
@@ -205,14 +223,14 @@ impl<T, R: Reclaim> Drop for Queue<T, R> {
 // QueueRef
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct QueueRef<'q, T, R: Reclaim> {
+pub struct QueueRef<'q, T, R: ReclaimRef<Node<T, R>>> {
     queue: &'q Queue<T, R>,
     reclaimer_local_state: R::LocalState,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: Reclaim + Retire<Node<T, R>>> QueueRef<'q, T, R> {
+impl<'q, T, R: ReclaimRef<Node<T, R>>> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
         Self { queue, reclaimer_local_state: unsafe { queue.reclaimer.build_local_state() } }
@@ -233,14 +251,14 @@ impl<'q, T, R: Reclaim + Retire<Node<T, R>>> QueueRef<'q, T, R> {
 // Node
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Node<T, R> {
+pub struct Node<T, R: ReclaimRef<Self>> {
     elem: MaybeUninit<T>,
-    next: Atomic<Self, R>,
+    next: Atomic<Self, R::Reclaim>,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim> Node<T, R> {
+impl<T, R: ReclaimRef<Self>> Node<T, R> {
     /// Creates a sentinel [`Node`] with an uninitialized elem.
     #[inline]
     fn sentinel() -> Self {

@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
 use conquer_util::align::Aligned128 as CacheLineAligned;
 
-use crate::{LocalState, Owned, Reclaim, Retire};
+use crate::{Owned, ReclaimLocalState, ReclaimRef};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 
@@ -19,15 +19,22 @@ const NODE_SIZE: usize = 1024;
 ///
 /// The implementation is based on an algorithm by Andreia Correia and Pedro
 /// Ramalhete.
-pub struct Queue<T, R: Reclaim> {
-    head: CacheLineAligned<Atomic<Node<T, R>, R>>,
-    tail: CacheLineAligned<Atomic<Node<T, R>, R>>,
+pub struct Queue<T, R: ReclaimRef<Node<T, R>>> {
+    head: CacheLineAligned<Atomic<Node<T, R>, R::Reclaim>>,
+    tail: CacheLineAligned<Atomic<Node<T, R>, R::Reclaim>>,
     reclaimer: R,
 }
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Queue<T, R> {
+    #[inline]
+    pub fn new() -> Self {
+        Self::with_reclaimer(Default::default())
+    }
+}
+
+impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
     /// The list consists of linked array nodes and this constant defines the
     /// size of each array.
     pub const NODE_SIZE: usize = NODE_SIZE;
@@ -35,12 +42,12 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
 
     /// Creates a new empty queue.
     #[inline]
-    pub fn new() -> Self {
+    pub fn with_reclaimer(reclaimer: R) -> Self {
         let node = Owned::leak(Owned::new(Node::new()));
         Self {
             head: CacheLineAligned::new(Atomic::from(node)),
             tail: CacheLineAligned::new(Atomic::from(node)),
-            reclaimer: R::default(),
+            reclaimer,
         }
     }
 
@@ -135,12 +142,12 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
     }
 
     #[inline]
-    fn head(&self) -> &Atomic<Node<T, R>, R> {
+    fn head(&self) -> &Atomic<Node<T, R>, R::Reclaim> {
         self.head.get()
     }
 
     #[inline]
-    fn tail(&self) -> &Atomic<Node<T, R>, R> {
+    fn tail(&self) -> &Atomic<Node<T, R>, R::Reclaim> {
         self.tail.get()
     }
 }
@@ -149,14 +156,14 @@ impl<T, R: Reclaim + Retire<Node<T, R>>> Queue<T, R> {
 // QueueRef
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct QueueRef<'q, T, R: Reclaim> {
+pub struct QueueRef<'q, T, R: ReclaimRef<Node<T, R>>> {
     queue: &'q Queue<T, R>,
     reclaim_local_state: R::LocalState,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: Reclaim + Retire<Node<T, R>>> QueueRef<'q, T, R> {
+impl<'q, T, R: ReclaimRef<Node<T, R>>> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
         Self { queue, reclaim_local_state: unsafe { queue.reclaimer.build_local_state() } }
@@ -187,16 +194,16 @@ impl<'q, T, R: Reclaim + Retire<Node<T, R>>> QueueRef<'q, T, R> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[repr(C)]
-pub struct Node<T, R: Reclaim> {
+pub struct Node<T, R: ReclaimRef<Node<T, R>>> {
     pop_idx: AtomicU32,
     slots: [Slot<T>; NODE_SIZE],
     push_idx: AtomicU32,
-    next: Atomic<Self, R>,
+    next: Atomic<Self, R::Reclaim>,
 }
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: Reclaim> Node<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Node<T, R> {
     #[inline]
     fn new() -> Self {
         Self {
