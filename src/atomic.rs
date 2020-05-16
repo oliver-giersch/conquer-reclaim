@@ -285,7 +285,7 @@ impl<T, R: Reclaim + Retire<T>, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn load<'g>(
         &self,
-        guard: &'g mut impl Protect<T, Reclaim = R>,
+        guard: &'g mut impl Protect<Reclaim = R>,
         order: Ordering,
     ) -> Protected<'g, T, R, N> {
         guard.protect(self, order)
@@ -296,7 +296,7 @@ impl<T, R: Reclaim + Retire<T>, N: Unsigned> Atomic<T, R, N> {
     pub fn load_if_equal<'g>(
         &self,
         expected: MarkedPtr<T, N>,
-        guard: &'g mut impl Protect<T, Reclaim = R>,
+        guard: &'g mut impl Protect<Reclaim = R>,
         order: Ordering,
     ) -> Result<Protected<'g, T, R, N>, NotEqual> {
         guard.protect_if_equal(self, expected, order)

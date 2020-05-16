@@ -67,10 +67,7 @@ impl<H: Default> Retired<Erased<H>> {
 impl<R: Reclaim> fmt::Debug for Retired<R> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Retired")
-            .field("address", &self.data_ptr())
-            .field("virtual_drop", &R::VIRTUAL_DROP)
-            .finish()
+        f.debug_struct("Retired").field("address", &self.data_ptr()).finish()
     }
 }
 

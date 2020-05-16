@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
 use conquer_util::align::Aligned128 as CacheLineAligned;
 
-use crate::{Owned, ReclaimLocalState, ReclaimRef};
+use crate::{Owned, ReclaimLocalState, ReclaimRef, Retire};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 
@@ -19,7 +19,7 @@ const NODE_SIZE: usize = 1024;
 ///
 /// The implementation is based on an algorithm by Andreia Correia and Pedro
 /// Ramalhete.
-pub struct Queue<T, R: ReclaimRef<Node<T, R>>> {
+pub struct Queue<T, R: ReclaimRef> {
     head: CacheLineAligned<Atomic<Node<T, R>, R::Reclaim>>,
     tail: CacheLineAligned<Atomic<Node<T, R>, R::Reclaim>>,
     reclaimer: R,
@@ -27,14 +27,14 @@ pub struct Queue<T, R: ReclaimRef<Node<T, R>>> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>> + Default> Queue<T, R> {
+impl<T, R: ReclaimRef + Default> Queue<T, R> {
     #[inline]
     pub fn new() -> Self {
         Self::with_reclaimer(Default::default())
     }
 }
 
-impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
+impl<T, R: ReclaimRef> Queue<T, R> {
     /// The list consists of linked array nodes and this constant defines the
     /// size of each array.
     pub const NODE_SIZE: usize = NODE_SIZE;
@@ -50,7 +50,12 @@ impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
             reclaimer,
         }
     }
+}
 
+impl<T, R: ReclaimRef> Queue<T, R>
+where
+    R::Reclaim: Retire<Node<T, R>>,
+{
     /// Returns `true` if the queue is empty.
     ///
     /// # Safety
@@ -156,19 +161,24 @@ impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
 // QueueRef
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct QueueRef<'q, T, R: ReclaimRef<Node<T, R>>> {
+pub struct QueueRef<'q, T, R: ReclaimRef> {
     queue: &'q Queue<T, R>,
     reclaim_local_state: R::LocalState,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: ReclaimRef<Node<T, R>>> QueueRef<'q, T, R> {
+impl<'q, T, R: ReclaimRef> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
         Self { queue, reclaim_local_state: unsafe { queue.reclaimer.build_local_state() } }
     }
+}
 
+impl<'q, T, R: ReclaimRef> QueueRef<'q, T, R>
+where
+    R::Reclaim: Retire<Node<T, R>>,
+{
     /// Returns `true` if the queue is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
@@ -194,7 +204,7 @@ impl<'q, T, R: ReclaimRef<Node<T, R>>> QueueRef<'q, T, R> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[repr(C)]
-pub struct Node<T, R: ReclaimRef<Node<T, R>>> {
+pub struct Node<T, R: ReclaimRef> {
     pop_idx: AtomicU32,
     slots: [Slot<T>; NODE_SIZE],
     push_idx: AtomicU32,
@@ -203,7 +213,7 @@ pub struct Node<T, R: ReclaimRef<Node<T, R>>> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> Node<T, R> {
+impl<T, R: ReclaimRef> Node<T, R> {
     #[inline]
     fn new() -> Self {
         Self {

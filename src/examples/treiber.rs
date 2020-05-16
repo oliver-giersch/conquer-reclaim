@@ -31,18 +31,18 @@ pub static NODE_DROP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// An [`Arc`] based version of Treiber's lock-free stack.
-pub struct ArcStack<T, R: ReclaimRef<Node<T, R>>> {
+pub struct ArcStack<T, R: ReclaimRef> {
     inner: Arc<Stack<T, R>>,
     reclaim_local_state: ManuallyDrop<R::LocalState>,
 }
 
 /*********** impl Send ****************************************************************************/
 
-unsafe impl<T, R: ReclaimRef<Node<T, R>>> Send for ArcStack<T, R> {}
+unsafe impl<T, R: ReclaimRef> Send for ArcStack<T, R> {}
 
 /*********** impl Clone ***************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcStack<T, R> {
+impl<T, R: ReclaimRef> Clone for ArcStack<T, R> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
@@ -56,29 +56,19 @@ impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcStack<T, R> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>> + Default> ArcStack<T, R> {
+impl<T, R: ReclaimRef + Default> ArcStack<T, R> {
     #[inline]
     pub fn new() -> Self {
         Self::with_reclaimer(Default::default())
     }
 }
 
-impl<T, R: ReclaimRef<Node<T, R>>> ArcStack<T, R> {
+impl<T, R: ReclaimRef> ArcStack<T, R> {
     #[inline]
     pub fn with_reclaimer(reclaimer: R) -> Self {
         let inner = Arc::new(Stack::<_, R>::with_reclaimer(reclaimer));
         let reclaim_local_state = unsafe { inner.reclaimer.build_local_state() };
         Self { inner, reclaim_local_state: ManuallyDrop::new(reclaim_local_state) }
-    }
-
-    #[inline]
-    pub fn push(&self, elem: T) {
-        self.inner.push(elem)
-    }
-
-    #[inline]
-    pub fn pop(&self) -> Option<T> {
-        unsafe { self.inner.pop_unchecked(&self.reclaim_local_state) }
     }
 
     #[inline]
@@ -100,9 +90,24 @@ impl<T, R: ReclaimRef<Node<T, R>>> ArcStack<T, R> {
     }
 }
 
+impl<T, R: ReclaimRef> ArcStack<T, R>
+where
+    R::Reclaim: Retire<Node<T, R>>,
+{
+    #[inline]
+    pub fn push(&self, elem: T) {
+        self.inner.push(elem)
+    }
+
+    #[inline]
+    pub fn pop(&self) -> Option<T> {
+        unsafe { self.inner.pop_unchecked(&self.reclaim_local_state) }
+    }
+}
+
 /********** impl Default **************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for ArcStack<T, R> {
+impl<T, R: ReclaimRef + Default> Default for ArcStack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -111,7 +116,7 @@ impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for ArcStack<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> Drop for ArcStack<T, R> {
+impl<T, R: ReclaimRef> Drop for ArcStack<T, R> {
     #[inline]
     fn drop(&mut self) {
         // safety: Drop Local state before the `Arc`, because it may hold a pointer into it.
@@ -121,7 +126,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Drop for ArcStack<T, R> {
 
 /********** impl From (Stack) *********************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> From<Stack<T, R>> for ArcStack<T, R> {
+impl<T, R: ReclaimRef> From<Stack<T, R>> for ArcStack<T, R> {
     #[inline]
     fn from(stack: Stack<T, R>) -> Self {
         let inner = Arc::new(stack);
@@ -135,28 +140,33 @@ impl<T, R: ReclaimRef<Node<T, R>>> From<Stack<T, R>> for ArcStack<T, R> {
 // Stack
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Stack<T, R: ReclaimRef<Node<T, R>>> {
+pub struct Stack<T, R: ReclaimRef> {
     head: Atomic<Node<T, R>, R::Reclaim>,
     reclaimer: R,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>> + Default> Stack<T, R> {
+impl<T, R: ReclaimRef + Default> Stack<T, R> {
     #[inline]
     pub fn new() -> Self {
         Self::with_reclaimer(Default::default())
     }
 }
 
-impl<T, R: ReclaimRef<Node<T, R>>> Stack<T, R> {
+impl<T, R: ReclaimRef> Stack<T, R> {
     const RELEASE_CAS: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
     pub fn with_reclaimer(reclaimer: R) -> Self {
         Self { head: Atomic::null(), reclaimer }
     }
+}
 
+impl<T, R: ReclaimRef> Stack<T, R>
+where
+    R::Reclaim: Retire<Node<T, R>>,
+{
     #[inline]
     pub fn push(&self, elem: T) {
         let mut node = Owned::new(Node::new(elem));
@@ -193,7 +203,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Stack<T, R> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for Stack<T, R> {
+impl<T, R: ReclaimRef + Default> Default for Stack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -202,7 +212,7 @@ impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for Stack<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> Drop for Stack<T, R> {
+impl<T, R: ReclaimRef> Drop for Stack<T, R> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -217,7 +227,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Drop for Stack<T, R> {
 
 /********** impl IntoIterator *********************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> IntoIterator for Stack<T, R> {
+impl<T, R: ReclaimRef> IntoIterator for Stack<T, R> {
     type Item = T;
     type IntoIter = IntoIter<T, R>;
 
@@ -229,7 +239,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> IntoIterator for Stack<T, R> {
 
 /********** impl FromIterator *********************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>> + Default> FromIterator<T> for Stack<T, R> {
+impl<T, R: ReclaimRef + Default> FromIterator<T> for Stack<T, R> {
     #[inline]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let head = Atomic::null();
@@ -250,19 +260,24 @@ impl<T, R: ReclaimRef<Node<T, R>> + Default> FromIterator<T> for Stack<T, R> {
 // StackRef
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct StackRef<'s, T, R: ReclaimRef<Node<T, R>>> {
+pub struct StackRef<'s, T, R: ReclaimRef> {
     stack: &'s Stack<T, R>,
     reclaimer_local_state: R::LocalState,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<'s, T, R: ReclaimRef<Node<T, R>> + Retire<Node<T, R>>> StackRef<'s, T, R> {
+impl<'s, T, R: ReclaimRef> StackRef<'s, T, R> {
     #[inline]
     pub fn new(stack: &'s Stack<T, R>) -> Self {
         Self { stack, reclaimer_local_state: unsafe { stack.reclaimer.build_local_state() } }
     }
+}
 
+impl<'s, T, R: ReclaimRef> StackRef<'s, T, R>
+where
+    R::Reclaim: Retire<Node<T, R>>,
+{
     #[inline]
     pub fn push(&self, elem: T) {
         self.stack.push(elem)
@@ -278,13 +293,13 @@ impl<'s, T, R: ReclaimRef<Node<T, R>> + Retire<Node<T, R>>> StackRef<'s, T, R> {
 // IntoIter
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct IntoIter<T, R: ReclaimRef<Node<T, R>>> {
+pub struct IntoIter<T, R: ReclaimRef> {
     curr: Option<Owned<Node<T, R>, R::Reclaim>>,
 }
 
 /********** impl Iterator *************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> Iterator for IntoIter<T, R> {
+impl<T, R: ReclaimRef> Iterator for IntoIter<T, R> {
     type Item = T;
 
     #[inline]
@@ -299,7 +314,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Iterator for IntoIter<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> Drop for IntoIter<T, R> {
+impl<T, R: ReclaimRef> Drop for IntoIter<T, R> {
     #[inline]
     fn drop(&mut self) {
         while let Some(_) = self.next() {}
@@ -311,7 +326,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Drop for IntoIter<T, R> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A node type for storing a [`Stack`]'s individual elements.
-pub struct Node<T, R: ReclaimRef<Self>> {
+pub struct Node<T, R: ReclaimRef> {
     /// The node's element, which is only ever dropped as part of a node when a
     /// non-empty [`Stack`] itself is dropped.
     elem: ManuallyDrop<T>,
@@ -321,7 +336,7 @@ pub struct Node<T, R: ReclaimRef<Self>> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: ReclaimRef<Node<T, R>>> Node<T, R> {
+impl<T, R: ReclaimRef> Node<T, R> {
     #[inline]
     fn new(elem: T) -> Self {
         Self { elem: ManuallyDrop::new(elem), next: Atomic::default() }

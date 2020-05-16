@@ -11,9 +11,9 @@ use crate::{NotEqual, Protected};
 // ReclaimRef (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait ReclaimRef<T>: Sized {
-    type LocalState: ReclaimLocalState<T, Reclaim = Self::Reclaim>;
-    type Reclaim: Reclaim + Retire<T>;
+pub trait ReclaimRef: Sized {
+    type LocalState: ReclaimLocalState<Reclaim = Self::Reclaim>;
+    type Reclaim: Reclaim;
 
     unsafe fn build_local_state(&self) -> Self::LocalState;
 }
@@ -22,9 +22,9 @@ pub trait ReclaimRef<T>: Sized {
 // ReclaimLocalState (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait ReclaimLocalState<T> {
-    type Guard: Protect<T, Reclaim = Self::Reclaim>;
-    type Reclaim: Reclaim + Retire<T>;
+pub trait ReclaimLocalState {
+    type Guard: Protect<Reclaim = Self::Reclaim>;
+    type Reclaim: Reclaim;
 
     fn build_guard(&self) -> Self::Guard;
     unsafe fn retire_record(&self, retired: Retired<Self::Reclaim>);
@@ -36,58 +36,54 @@ pub trait ReclaimLocalState<T> {
 
 /// A trait for implementing guard types associated with a specific [`Reclaim`]
 /// mechanism.
-pub unsafe trait Protect<T>: Clone {
+pub unsafe trait Protect: Clone {
     /// The associated [`Reclaim`] mechanism.
-    type Reclaim: Reclaim + Retire<T>;
+    type Reclaim: Reclaim;
 
     /// Loads and protects the value currently stored in `src` and returns a
     /// protected [`Shared`] pointer to it.
     ///
     /// `protect` takes an [`Ordering`] argument...
-    fn protect<N: Unsigned>(
+    fn protect<T, N: Unsigned>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         order: Ordering,
-    ) -> Protected<T, Self::Reclaim, N>;
+    ) -> Protected<T, Self::Reclaim, N>
+    where
+        Self::Reclaim: Retire<T>;
 
     /// Loads and protects the value currently stored in `src` if it equals the
     /// `expected` value and returns a protected [`Shared`] pointer to it.
     ///
     /// `protect_if_equal` takes an [`Ordering`] argument...
-    fn protect_if_equal<N: Unsigned>(
+    fn protect_if_equal<T, N: Unsigned>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<Protected<T, Self::Reclaim, N>, NotEqual>;
+    ) -> Result<Protected<T, Self::Reclaim, N>, NotEqual>
+    where
+        Self::Reclaim: Retire<T>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Retire (public sealed trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait Retire<T>: Reclaim {
+pub unsafe trait Retire<T>: Reclaim {
     unsafe fn retire(ptr: *mut T) -> *mut Self::Reclaimable;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Reclaim (public sealed trait)
+// Reclaim
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait Reclaim: Sealed + Sized {
+pub unsafe trait Reclaim: Sized {
     type DropCtx: Default + Sized;
     type Header: Default + Sized;
     type Reclaimable: Sized;
-
-    const VIRTUAL_DROP: bool;
 
     unsafe fn reclaim(retired: *mut Self::Reclaimable);
     unsafe fn convert_to_data(retired: *mut Self::Reclaimable) -> *mut ();
     unsafe fn convert_to_header(retired: *mut Self::Reclaimable) -> *mut Self::Header;
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Sealed (private sealed trait)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub trait Sealed {}
