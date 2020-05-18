@@ -4,7 +4,7 @@ use core::mem;
 use core::ptr;
 
 use crate::record::AssocRecord;
-use crate::traits::{Reclaim, Retire};
+use crate::traits::Reclaim;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Typed

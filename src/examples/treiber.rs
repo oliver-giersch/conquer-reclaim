@@ -16,7 +16,7 @@ cfg_if::cfg_if! {
 use conquer_pointer::MarkedPtr;
 
 use crate::typenum::U0;
-use crate::{Maybe, ReclaimLocalState, ReclaimRef, Retire};
+use crate::{AssocReclaim, Maybe, ReclaimLocalState, ReclaimRef, Retire};
 
 type Atomic<T, R> = crate::Atomic<T, R, U0>;
 type Owned<T, R> = crate::Owned<T, R, U0>;
@@ -90,9 +90,9 @@ impl<T, R: ReclaimRef> ArcStack<T, R> {
     }
 }
 
-impl<T, R: ReclaimRef> ArcStack<T, R>
+impl<T, R: ReclaimRef<Item = Node<T, R>>> ArcStack<T, R>
 where
-    R::Reclaim: Retire<Node<T, R>>,
+    AssocReclaim<R>: Retire<Node<T, R>>,
 {
     #[inline]
     pub fn push(&self, elem: T) {
@@ -163,9 +163,9 @@ impl<T, R: ReclaimRef> Stack<T, R> {
     }
 }
 
-impl<T, R: ReclaimRef> Stack<T, R>
+impl<T, R: ReclaimRef<Item = Node<T, R>>> Stack<T, R>
 where
-    R::Reclaim: Retire<Node<T, R>>,
+    AssocReclaim<R>: Retire<Node<T, R>>,
 {
     #[inline]
     pub fn push(&self, elem: T) {
@@ -192,7 +192,7 @@ where
             let next = shared.as_ref().next.load_unprotected(Relaxed).assume_storable();
             if let Ok(unlinked) = self.head.compare_exchange_weak(shared, next, Self::RELEASE_CAS) {
                 let elem = unlinked.take(|node| &node.elem);
-                local_state.retire_record(unlinked.into_retired());
+                local_state.retire_record(unlinked);
                 return Some(elem);
             }
         }
@@ -274,9 +274,9 @@ impl<'s, T, R: ReclaimRef> StackRef<'s, T, R> {
     }
 }
 
-impl<'s, T, R: ReclaimRef> StackRef<'s, T, R>
+impl<'s, T, R: ReclaimRef<Item = Node<T, R>>> StackRef<'s, T, R>
 where
-    R::Reclaim: Retire<Node<T, R>>,
+    AssocReclaim<R>: Retire<Node<T, R>>,
 {
     #[inline]
     pub fn push(&self, elem: T) {

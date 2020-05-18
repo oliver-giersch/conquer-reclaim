@@ -10,7 +10,7 @@ use core::sync::atomic::Ordering;
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{AtomicMarkedPtr, MarkedNonNull, MarkedPtr, Null};
 
-use crate::traits::{Protect, Reclaim, Retire};
+use crate::traits::{Protect, Reclaim};
 use crate::{Maybe, NotEqual, Owned, Protected, Unlinked, Unprotected};
 
 pub use self::compare::Comparable;
@@ -266,7 +266,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     }
 }
 
-impl<T, R: Reclaim + Retire<T>, N: Unsigned> Atomic<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     /// Loads a value from the pointer using `guard` to protect it from
     /// reclamation.
     ///
@@ -285,7 +285,7 @@ impl<T, R: Reclaim + Retire<T>, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn load<'g>(
         &self,
-        guard: &'g mut impl Protect<Reclaim = R>,
+        guard: &'g mut impl Protect<Item = T, Reclaim = R>,
         order: Ordering,
     ) -> Protected<'g, T, R, N> {
         guard.protect(self, order)
@@ -296,7 +296,7 @@ impl<T, R: Reclaim + Retire<T>, N: Unsigned> Atomic<T, R, N> {
     pub fn load_if_equal<'g>(
         &self,
         expected: MarkedPtr<T, N>,
-        guard: &'g mut impl Protect<Reclaim = R>,
+        guard: &'g mut impl Protect<Item = T, Reclaim = R>,
         order: Ordering,
     ) -> Result<Protected<'g, T, R, N>, NotEqual> {
         guard.protect_if_equal(self, expected, order)

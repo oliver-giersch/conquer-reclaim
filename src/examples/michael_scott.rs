@@ -10,7 +10,7 @@ cfg_if::cfg_if! {
     }
 }
 
-use crate::{Maybe, ReclaimLocalState, ReclaimRef, Retire};
+use crate::{AssocReclaim, Maybe, ReclaimLocalState, ReclaimRef, Retire};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
@@ -60,9 +60,9 @@ impl<T, R: ReclaimRef + Default> ArcQueue<T, R> {
     }
 }
 
-impl<T, R: ReclaimRef> ArcQueue<T, R>
+impl<T, R: ReclaimRef<Item = Node<T, R>>> ArcQueue<T, R>
 where
-    R::Reclaim: Retire<Node<T, R>>,
+    AssocReclaim<R>: Retire<Node<T, R>>,
 {
     #[inline]
     pub fn push(&self, elem: T) {
@@ -141,9 +141,9 @@ impl<T, R: ReclaimRef + Default> Queue<T, R> {
     }
 }
 
-impl<T, R: ReclaimRef> Queue<T, R>
+impl<T, R: ReclaimRef<Item = Node<T, R>>> Queue<T, R>
 where
-    R::Reclaim: Retire<Node<T, R>>,
+    AssocReclaim<R>: Retire<Node<T, R>>,
 {
     const REL_RLX: (Ordering, Ordering) = (Release, Relaxed);
 
@@ -184,7 +184,7 @@ where
                     // safety: The previous head is no longer visible for other threads and since
                     // `elem` won't be dropped when the node is reclaimed it doesn't matter if it
                     // outlives any internal references.
-                    local_state.retire_record(unlinked.into_retired());
+                    local_state.retire_record(unlinked);
 
                     return res;
                 }
@@ -236,9 +236,9 @@ pub struct QueueRef<'q, T, R: ReclaimRef> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: ReclaimRef> QueueRef<'q, T, R>
+impl<'q, T, R: ReclaimRef<Item = Node<T, R>>> QueueRef<'q, T, R>
 where
-    R::Reclaim: Retire<Node<T, R>>,
+    AssocReclaim<R>: Retire<Node<T, R>>,
 {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {

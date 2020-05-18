@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
 use conquer_util::align::Aligned128 as CacheLineAligned;
 
-use crate::{Owned, ReclaimLocalState, ReclaimRef, Retire};
+use crate::{AssocReclaim, Owned, ReclaimLocalState, ReclaimRef, Retire};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
 
@@ -52,9 +52,9 @@ impl<T, R: ReclaimRef> Queue<T, R> {
     }
 }
 
-impl<T, R: ReclaimRef> Queue<T, R>
+impl<T, R: ReclaimRef<Item = Node<T, R>>> Queue<T, R>
 where
-    R::Reclaim: Retire<Node<T, R>>,
+    AssocReclaim<R>: Retire<Node<T, R>>,
 {
     /// Returns `true` if the queue is empty.
     ///
@@ -140,7 +140,7 @@ where
                 if let Ok(unlinked) =
                     self.head().compare_exchange(head, next.assume_storable(), Self::REL_RLX)
                 {
-                    local_state.retire_record(unlinked.into_retired());
+                    local_state.retire_record(unlinked);
                 }
             }
         }
@@ -175,9 +175,9 @@ impl<'q, T, R: ReclaimRef> QueueRef<'q, T, R> {
     }
 }
 
-impl<'q, T, R: ReclaimRef> QueueRef<'q, T, R>
+impl<'q, T, R: ReclaimRef<Item = Node<T, R>>> QueueRef<'q, T, R>
 where
-    R::Reclaim: Retire<Node<T, R>>,
+    AssocReclaim<R>: Retire<Node<T, R>>,
 {
     /// Returns `true` if the queue is empty.
     #[inline]

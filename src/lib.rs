@@ -9,7 +9,7 @@ extern crate alloc;
 pub mod prelude {
     //! TODO: docs...
 
-    pub use crate::traits::{Protect, Reclaim, ReclaimLocalState, ReclaimRef, Retire};
+    pub use crate::traits::{Protect, Reclaim, ReclaimLocalState, ReclaimRef};
 }
 
 #[macro_use]
@@ -21,9 +21,7 @@ pub mod leak;
 
 mod atomic;
 mod imp;
-mod reclaim;
 mod record;
-mod retired;
 mod traits;
 
 use core::marker::PhantomData;
@@ -36,14 +34,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
-pub use crate::retired::Retired;
-pub use crate::traits::{Protect, Reclaim, ReclaimLocalState, ReclaimRef, Retire};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// AssocReclaimable
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub type AssocReclaimable<R> = <R as Reclaim>::Reclaimable;
+pub use crate::traits::{AssocReclaim, Protect, Reclaim, ReclaimLocalState, ReclaimRef, Retire};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Maybe

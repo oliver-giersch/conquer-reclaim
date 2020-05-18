@@ -7,7 +7,7 @@ use crate::traits::Reclaim;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A type alias for a record associated to a [`Reclaim`] implementation.
-pub(crate) type AssocRecord<T, R> = Record<<R as Reclaim>::DropCtx, <R as Reclaim>::Header, T>;
+pub(crate) type AssocRecord<T, R> = Record<<R as Reclaim>::Header, T>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Record
@@ -20,9 +20,7 @@ pub(crate) type AssocRecord<T, R> = Record<<R as Reclaim>::DropCtx, <R as Reclai
 /// This struct guarantees the layout of its fields to match the declaration
 /// order, i.e., the `header` always precedes the `data`.
 #[repr(C)]
-pub(crate) struct Record<C, H, T> {
-    /// The record's drop context.
-    pub drop_ctx: C,
+pub(crate) struct Record<H, T> {
     /// The record's header
     pub header: H,
     /// The wrapped record data itself.
@@ -31,14 +29,14 @@ pub(crate) struct Record<C, H, T> {
 
 /********** impl inherent *************************************************************************/
 
-impl<C: Default, H: Default, T> Record<C, H, T> {
+impl<H: Default, T> Record<H, T> {
     #[inline]
     pub fn new(data: T) -> Self {
-        Self { drop_ctx: C::default(), header: H::default(), data }
+        Self { header: H::default(), data }
     }
 }
 
-impl<C, H, T> Record<C, H, T> {
+impl<H, T> Record<H, T> {
     /// Returns the pointer to the [`Record`] containing the value pointed to by
     /// `data`.
     ///
@@ -64,14 +62,8 @@ impl<C, H, T> Record<C, H, T> {
     }
 
     #[inline]
-    const fn drop_ctx_offset() -> usize {
-        0
-    }
-
-    #[inline]
     const fn header_offset() -> usize {
-        let offset = Self::drop_ctx_offset() + mem::size_of::<C>();
-        offset + offset.wrapping_neg() % mem::align_of::<H>()
+        0
     }
 
     #[inline]
