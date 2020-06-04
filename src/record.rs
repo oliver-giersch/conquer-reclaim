@@ -29,13 +29,6 @@ pub(crate) struct Record<H, T> {
 
 /********** impl inherent *************************************************************************/
 
-impl<H: Default, T> Record<H, T> {
-    #[inline]
-    pub fn new(data: T) -> Self {
-        Self { header: H::default(), data }
-    }
-}
-
 impl<H, T> Record<H, T> {
     /// Returns the pointer to the [`Record`] containing the value pointed to by
     /// `data`.

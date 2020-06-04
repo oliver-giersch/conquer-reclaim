@@ -6,13 +6,14 @@ use core::ptr;
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
-use crate::traits::Reclaim;
+use crate::retired::Retired;
+use crate::traits::{Reclaim, Retire};
 
 use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
+impl<T, R: Reclaim + Retire<T>, N: Unsigned> Unlinked<T, R, N> {
     impl_from_ptr!();
     impl_from_non_null!();
 
@@ -22,6 +23,11 @@ impl<T, R: Reclaim, N: Unsigned> Unlinked<T, R, N> {
     }
 
     impl_common!();
+
+    #[inline]
+    pub fn into_retired(self) -> Retired<T, R> {
+        unsafe { Retired::new_unchecked(self.inner.decompose_non_null()) }
+    }
 
     #[inline]
     pub unsafe fn take<U>(&self, take: impl (FnOnce(&T) -> &ManuallyDrop<U>) + 'static) -> U {

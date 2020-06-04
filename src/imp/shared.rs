@@ -61,7 +61,7 @@ impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
     /// static GLOBAL: Atomic<Foo, U0> = Atomic::null();
     ///
     /// // ...in thread 1
-    /// let mut owned = Owned::new(Default::default());
+    /// let mut owned = Owned::with_header(Default::default());
     /// owned.bar = -1;
     ///
     /// GLOBAL.store(owned, Ordering::Release);

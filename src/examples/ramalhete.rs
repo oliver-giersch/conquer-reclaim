@@ -27,14 +27,20 @@ pub struct Queue<T, R: ReclaimRef> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: ReclaimRef + Default> Queue<T, R> {
+impl<T, R: ReclaimRef<Item = Node<T, R>> + Default> Queue<T, R>
+where
+    AssocReclaim<R>: Retire<Node<T, R>>,
+{
     #[inline]
     pub fn new() -> Self {
         Self::with_reclaimer(Default::default())
     }
 }
 
-impl<T, R: ReclaimRef> Queue<T, R> {
+impl<T, R: ReclaimRef<Item = Node<T, R>>> Queue<T, R>
+where
+    AssocReclaim<R>: Retire<Node<T, R>>,
+{
     /// The list consists of linked array nodes and this constant defines the
     /// size of each array.
     pub const NODE_SIZE: usize = NODE_SIZE;
@@ -43,19 +49,14 @@ impl<T, R: ReclaimRef> Queue<T, R> {
     /// Creates a new empty queue.
     #[inline]
     pub fn with_reclaimer(reclaimer: R) -> Self {
-        let node = Owned::leak(Owned::new(Node::new()));
+        let node = Owned::leak(reclaimer.alloc_owned(Node::new()));
         Self {
             head: CacheLineAligned::new(Atomic::from(node)),
             tail: CacheLineAligned::new(Atomic::from(node)),
             reclaimer,
         }
     }
-}
 
-impl<T, R: ReclaimRef<Item = Node<T, R>>> Queue<T, R>
-where
-    AssocReclaim<R>: Retire<Node<T, R>>,
-{
     /// Returns `true` if the queue is empty.
     ///
     /// # Safety
@@ -94,7 +95,7 @@ where
 
                 let next = tail.as_ref().next.load_unprotected(Ordering::Acquire);
                 if next.is_null() {
-                    let node = Owned::leak(Owned::new(Node::with_tentative(&elem)));
+                    let node = Owned::leak(local_state.alloc_owned(Node::with_tentative(&elem)));
                     if tail.as_ref().next.compare_exchange(next, node, Self::REL_RLX).is_ok() {
                         let _ = self.tail().compare_exchange(tail, node, Self::REL_RLX);
                         return;

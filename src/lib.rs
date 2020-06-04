@@ -21,7 +21,9 @@ pub mod leak;
 
 mod atomic;
 mod imp;
+mod reclaim;
 mod record;
+mod retired;
 mod traits;
 
 use core::marker::PhantomData;

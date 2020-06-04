@@ -69,6 +69,11 @@ impl<T> ReclaimRef for LeakingRef<T> {
     type Reclaim = Leaking;
     type LocalState = LeakingLocalState<T>;
 
+    #[inline]
+    fn alloc_owned<N: Unsigned>(&self, value: Self::Item) -> Owned<Self::Item, N> {
+        unsafe { Owned::with_header((), value) }
+    }
+
     #[inline(always)]
     unsafe fn build_local_state(&self) -> Self::LocalState {
         LeakingLocalState(PhantomData)
@@ -88,6 +93,11 @@ impl<T> ReclaimLocalState for LeakingLocalState<T> {
     type Reclaim = Leaking;
 
     type Guard = Guard<T>;
+
+    #[inline]
+    fn alloc_owned<N: Unsigned>(&self, value: Self::Item) -> Owned<Self::Item, N> {
+        unsafe { Owned::with_header((), value) }
+    }
 
     #[inline(always)]
     fn build_guard(&self) -> Self::Guard {

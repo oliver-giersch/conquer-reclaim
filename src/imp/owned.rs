@@ -18,19 +18,9 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::atomic::Storable;
-use crate::record::AssocRecord;
+use crate::record::{AssocRecord, Record};
 use crate::traits::Reclaim;
 use crate::Owned;
-
-/********** impl Clone ****************************************************************************/
-
-impl<T: Clone, R: Reclaim, N: Unsigned> Clone for Owned<T, R, N> {
-    #[inline]
-    fn clone(&self) -> Self {
-        let (reference, tag) = unsafe { self.inner.decompose_ref() };
-        Self::with_tag(reference.clone(), tag)
-    }
-}
 
 /********** impl Send + Sync **********************************************************************/
 
@@ -39,13 +29,30 @@ unsafe impl<T, R: Reclaim, N: Unsigned> Sync for Owned<T, R, N> where T: Sync {}
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
-    /// Creates a new heap-allocated [`Record<T>`](Record) and returns an owning
-    /// handle to it.
+impl<T, R: Reclaim<Header = ()>, N: Unsigned> Owned<T, R, N> {
     #[inline]
-    pub fn new(owned: T) -> Self {
+    pub fn new(value: T) -> Self {
+        unsafe { Self::with_header((), value) }
+    }
+
+    #[inline]
+    pub fn with_tag(value: T, tag: usize) -> Self {
+        unsafe { Self::with_header_and_tag((), value, tag) }
+    }
+}
+
+impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
+    /// Creates a new heap-allocated [`Record<T>`](Record) with the given
+    /// `header` and `value` and returns an owning handle to it.
+    ///
+    /// # Safety
+    ///
+    /// The `header` must be in a state that allows correct reclamation
+    /// handling, as defined by the reclamation mechanism itself.
+    #[inline]
+    pub unsafe fn with_header(header: R::Header, value: T) -> Self {
         Self {
-            inner: unsafe { MarkedNonNull::compose_unchecked(Self::alloc_record(owned), 0) },
+            inner: MarkedNonNull::compose_unchecked(Self::alloc_record(header, value), 0),
             _marker: PhantomData,
         }
     }
@@ -75,9 +82,9 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
     /// assert_eq!((&"string", 0b1), shared.unwrap().decompose_ref());
     /// ```
     #[inline]
-    pub fn with_tag(owned: T, tag: usize) -> Self {
+    pub unsafe fn with_header_and_tag(header: R::Header, value: T, tag: usize) -> Self {
         Self {
-            inner: unsafe { MarkedNonNull::compose_unchecked(Self::alloc_record(owned), tag) },
+            inner: MarkedNonNull::compose_unchecked(Self::alloc_record(header, value), tag),
             _marker: PhantomData,
         }
     }
@@ -140,23 +147,6 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
 
     /// Decomposes the internal marked pointer, returning a reference and the
     /// separated tag.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use core::sync::atomic::Ordering::Relaxed;
-    ///
-    /// use conquer_reclaim::typenum::U1;
-    /// use conquer_reclaim::leak::Owned;
-    ///
-    /// type Atomic<T> = reclaim::leak::Atomic<T, U1>;
-    ///
-    /// let mut atomic = Atomic::from(Owned::with_tag("string", 0b1));
-    /// // ... potential operations by other threads ...
-    /// let owned = atomic.take(); // after all threads have joined
-    ///
-    /// assert_eq!((&"string", 0b1), Owned::decompose_ref(owned.as_ref().unwrap()));
-    /// ```
     #[inline]
     pub fn decompose_ref(owned: &Self) -> (&T, usize) {
         // this is safe because is `inner` is guaranteed to be backed by a valid allocation
@@ -188,8 +178,8 @@ impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N> {
     /// Allocates a records wrapping `owned` and returns the pointer to the
     /// wrapped value.
     #[inline]
-    fn alloc_record(owned: T) -> NonNull<T> {
-        let record = Box::leak(Box::new(AssocRecord::<_, R>::new(owned)));
+    fn alloc_record(header: R::Header, value: T) -> NonNull<T> {
+        let record = Box::leak(Box::new(Record { header, data: value }));
         NonNull::from(&record.data)
     }
 }
@@ -243,15 +233,6 @@ where
     }
 }
 
-/********** impl Default **************************************************************************/
-
-impl<T: Default, R: Reclaim, N: Unsigned> Default for Owned<T, R, N> {
-    #[inline]
-    fn default() -> Self {
-        Self::new(T::default())
-    }
-}
-
 /********** impl Deref ****************************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned> Deref for Owned<T, R, N> {
@@ -287,15 +268,6 @@ impl<T, R: Reclaim, N: Unsigned> Drop for Owned<T, R, N> {
             let record = AssocRecord::<_, R>::ptr_from_data(self.inner.decompose_ptr());
             mem::drop(Box::from_raw(record));
         }
-    }
-}
-
-/********** impl From (T) *************************************************************************/
-
-impl<T, R: Reclaim, N: Unsigned> From<T> for Owned<T, R, N> {
-    #[inline]
-    fn from(owned: T) -> Self {
-        Self::new(owned)
     }
 }
 

@@ -44,16 +44,10 @@ impl<T, R: ReclaimRef> Clone for ArcQueue<T, R> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: ReclaimRef> ArcQueue<T, R> {
-    #[inline]
-    pub fn with_reclaimer(reclaimer: R) -> Self {
-        let inner = Arc::new(Queue::<_, R>::with_reclaimer(reclaimer));
-        let reclaim_local_state = unsafe { inner.reclaimer.build_local_state() };
-        Self { inner, reclaim_local_state: ManuallyDrop::new(reclaim_local_state) }
-    }
-}
-
-impl<T, R: ReclaimRef + Default> ArcQueue<T, R> {
+impl<T, R: ReclaimRef<Item = Node<T, R>> + Default> ArcQueue<T, R>
+where
+    AssocReclaim<R>: Retire<Node<T, R>>,
+{
     #[inline]
     pub fn new() -> Self {
         Self::with_reclaimer(Default::default())
@@ -64,6 +58,13 @@ impl<T, R: ReclaimRef<Item = Node<T, R>>> ArcQueue<T, R>
 where
     AssocReclaim<R>: Retire<Node<T, R>>,
 {
+    #[inline]
+    pub fn with_reclaimer(reclaimer: R) -> Self {
+        let inner = Arc::new(Queue::<_, R>::with_reclaimer(reclaimer));
+        let reclaim_local_state = unsafe { inner.reclaimer.build_local_state() };
+        Self { inner, reclaim_local_state: ManuallyDrop::new(reclaim_local_state) }
+    }
+
     #[inline]
     pub fn push(&self, elem: T) {
         unsafe { self.inner.push_unchecked(elem, &*self.reclaim_local_state) }
@@ -77,7 +78,10 @@ where
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: ReclaimRef + Default> Default for ArcQueue<T, R> {
+impl<T, R: ReclaimRef<Item = Node<T, R>> + Default> Default for ArcQueue<T, R>
+where
+    AssocReclaim<R>: Retire<Node<T, R>>,
+{
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -122,19 +126,10 @@ pub struct Queue<T, R: ReclaimRef> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: ReclaimRef> Queue<T, R> {
-    #[inline]
-    pub fn with_reclaimer(reclaimer: R) -> Self {
-        let sentinel = Owned::<_, R::Reclaim>::leak(Owned::new(Node::sentinel()));
-        Self {
-            head: Atomic::<_, R::Reclaim>::from(sentinel),
-            tail: Atomic::<_, R::Reclaim>::from(sentinel),
-            reclaimer,
-        }
-    }
-}
-
-impl<T, R: ReclaimRef + Default> Queue<T, R> {
+impl<T, R: ReclaimRef<Item = Node<T, R>> + Default> Queue<T, R>
+where
+    AssocReclaim<R>: Retire<Node<T, R>>,
+{
     #[inline]
     pub fn new() -> Self {
         Self::with_reclaimer(Default::default())
@@ -148,8 +143,18 @@ where
     const REL_RLX: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
+    pub fn with_reclaimer(reclaimer: R) -> Self {
+        let sentinel = Owned::leak(reclaimer.alloc_owned(Node::sentinel()));
+        Self {
+            head: Atomic::<_, R::Reclaim>::from(sentinel),
+            tail: Atomic::<_, R::Reclaim>::from(sentinel),
+            reclaimer,
+        }
+    }
+
+    #[inline]
     pub unsafe fn push_unchecked(&self, elem: T, local_state: &R::LocalState) {
-        let node = Owned::leak(Owned::new(Node::new(elem)));
+        let node = Owned::leak(local_state.alloc_owned(Node::new(elem)));
         let mut guard = local_state.build_guard();
         loop {
             let tail = self.tail.load(&mut guard, Acquire);
@@ -199,7 +204,10 @@ where
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: ReclaimRef + Default> Default for Queue<T, R> {
+impl<T, R: ReclaimRef<Item = Node<T, R>> + Default> Default for Queue<T, R>
+where
+    AssocReclaim<R>: Retire<Node<T, R>>,
+{
     #[inline]
     fn default() -> Self {
         Self::new()

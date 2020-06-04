@@ -96,7 +96,7 @@ where
 {
     #[inline]
     pub fn push(&self, elem: T) {
-        self.inner.push(elem)
+        unsafe { self.inner.push(elem, &self.reclaim_local_state) }
     }
 
     #[inline]
@@ -168,13 +168,13 @@ where
     AssocReclaim<R>: Retire<Node<T, R>>,
 {
     #[inline]
-    pub fn push(&self, elem: T) {
-        let mut node = Owned::new(Node::new(elem));
+    pub unsafe fn push(&self, elem: T, local_state: &R::LocalState) {
+        let mut node = local_state.alloc_owned(Node::new(elem));
         loop {
             let head = self.head.load_unprotected(Acquire);
             // safety: The store only becomes visible if the subsequent CAS succeeds, in which case
             // the head could not have changed and has therefore not been retired by any other thread
-            node.next.store(unsafe { head.assume_storable() }, Relaxed);
+            node.next.store(head.assume_storable(), Relaxed);
             match self.head.compare_exchange_weak(head, node, Self::RELEASE_CAS) {
                 Ok(_) => return,
                 Err(err) => node = err.input,
@@ -239,20 +239,25 @@ impl<T, R: ReclaimRef> IntoIterator for Stack<T, R> {
 
 /********** impl FromIterator *********************************************************************/
 
-impl<T, R: ReclaimRef + Default> FromIterator<T> for Stack<T, R> {
+impl<T, R: ReclaimRef<Item = Node<T, R>> + Default> FromIterator<T> for Stack<T, R>
+where
+    AssocReclaim<R>: Retire<Node<T, R>>,
+{
     #[inline]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let reclaimer = R::default();
+
         let head = Atomic::null();
         let mut prev = MarkedPtr::null();
 
         for elem in iter.into_iter() {
-            let node = Owned::new(Node::new(elem));
+            let node = reclaimer.alloc_owned(Node::new(elem));
             unsafe { node.next.as_raw() }.store(prev, Ordering::Relaxed);
             prev = Owned::as_marked_ptr(&node);
             head.store(node, Ordering::Relaxed);
         }
 
-        Self { head, reclaimer: R::default() }
+        Self { head, reclaimer }
     }
 }
 
@@ -280,7 +285,7 @@ where
 {
     #[inline]
     pub fn push(&self, elem: T) {
-        self.stack.push(elem)
+        unsafe { self.stack.push(elem, &self.reclaimer_local_state) };
     }
 
     #[inline]

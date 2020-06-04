@@ -4,7 +4,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
 use crate::atomic::Atomic;
-use crate::{NotEqual, Protected, Unlinked};
+use crate::{NotEqual, Owned, Protected, Unlinked};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // AssocReclaim (type alias)
@@ -17,7 +17,7 @@ pub type AssocReclaim<R> = <R as ReclaimRef>::Reclaim;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub unsafe trait Reclaim: Sized {
-    type Header: Default + Sized;
+    type Header: Sized;
     type Retired: Sized;
 
     unsafe fn reclaim(retired: *mut Self::Retired);
@@ -41,6 +41,7 @@ pub trait ReclaimRef: Sized {
 
     type LocalState: ReclaimLocalState<Item = Self::Item, Reclaim = Self::Reclaim>;
 
+    fn alloc_owned<N: Unsigned>(&self, value: Self::Item) -> Owned<Self::Item, Self::Reclaim, N>;
     unsafe fn build_local_state(&self) -> Self::LocalState;
 }
 
@@ -54,6 +55,7 @@ pub trait ReclaimLocalState {
 
     type Guard: Protect<Item = Self::Item, Reclaim = Self::Reclaim>;
 
+    fn alloc_owned<N: Unsigned>(&self, value: Self::Item) -> Owned<Self::Item, Self::Reclaim, N>;
     fn build_guard(&self) -> Self::Guard;
     unsafe fn retire_record<N: Unsigned>(&self, unlinked: Unlinked<Self::Item, Self::Reclaim, N>);
 }

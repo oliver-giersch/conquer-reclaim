@@ -4,7 +4,7 @@ use core::mem;
 use core::ptr;
 
 use crate::record::AssocRecord;
-use crate::traits::Reclaim;
+use crate::traits::{Reclaim, Retire};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Typed
@@ -45,9 +45,9 @@ impl<T, H> Default for Typed<T, H> {
 
 /********** impl Retire ***************************************************************************/
 
-unsafe impl<T, H: Default> Retire<T> for Typed<T, H> {
+unsafe impl<T, H> Retire<T> for Typed<T, H> {
     #[inline]
-    unsafe fn retire(ptr: *mut T) -> *mut Self::Reclaimable {
+    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
         // no need for conversion, ptr is retired (and reclaimed) as is, i.e., with all type
         // information statically known
         ptr
@@ -56,22 +56,21 @@ unsafe impl<T, H: Default> Retire<T> for Typed<T, H> {
 
 /********** impl Reclaim **************************************************************************/
 
-unsafe impl<T, H: Default> Reclaim for Typed<T, H> {
+unsafe impl<T, H> Reclaim for Typed<T, H> {
     /// There is no additional drop context required since all type information
     /// is statically known.
-    type DropCtx = ();
     type Header = H;
-    type Reclaimable = T;
+    type Retired = T;
 
     #[inline]
-    unsafe fn reclaim(retired: *mut Self::Reclaimable) {
+    unsafe fn reclaim(retired: *mut Self::Retired) {
         // use the offset to calculate the pointer from the data to the record containing it and
         // drop the entire record.
         let record = AssocRecord::<T, Self>::ptr_from_data(retired);
         mem::drop(Box::from_raw(record));
     }
 
-    #[inline]
+    /*#[inline]
     unsafe fn convert_to_data(retired: *mut Self::Reclaimable) -> *mut () {
         retired.cast()
     }
@@ -79,7 +78,7 @@ unsafe impl<T, H: Default> Reclaim for Typed<T, H> {
     #[inline]
     unsafe fn convert_to_header(retired: *mut Self::Reclaimable) -> *mut Self::Header {
         AssocRecord::<T, Self>::header_from_data(retired.cast())
-    }
+    }*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -103,22 +102,18 @@ impl<H> Copy for Erased<H> {}
 
 /********** impl Retire ***************************************************************************/
 
-unsafe impl<T, H: Default> Retire<T> for Erased<H> {
+unsafe impl<T, H> Retire<T> for Erased<H> {
     #[inline]
-    unsafe fn retire(ptr: *mut T) -> *mut Self::Reclaimable {
+    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
         let record = AssocRecord::<T, Self>::ptr_from_data(ptr);
         // set the record's drop context
-        (*record).drop_ctx = DropCtx {
-            // drop receives a type erased pointer that must be the same as the pointer returned
-            // from this function
-            drop: |retired| {
-                // restore the precise type of the record
-                let record: *mut AssocRecord<T, Self> = retired.cast();
-                // drop the entire record
-                mem::drop(Box::from_raw(record));
-            },
-            data: ptr.cast(),
+        (*record).header.drop = |retired| {
+            // restore the precise type of the record
+            let record: *mut AssocRecord<T, Self> = retired.cast();
+            // drop the entire record
+            mem::drop(Box::from_raw(record));
         };
+        (*record).header.data = ptr.cast();
 
         // return a type erased pointer to the record with its correctly set
         // drop context
@@ -128,22 +123,21 @@ unsafe impl<T, H: Default> Retire<T> for Erased<H> {
 
 /********** impl Reclaim **************************************************************************/
 
-unsafe impl<H: Default> Reclaim for Erased<H> {
-    type DropCtx = DropCtx;
-    type Header = H;
-    type Reclaimable = ();
+unsafe impl<H> Reclaim for Erased<H> {
+    type Header = DynHeader<H>;
+    type Retired = ();
 
     #[inline]
-    unsafe fn reclaim(retired: *mut Self::Reclaimable) {
+    unsafe fn reclaim(retired: *mut Self::Retired) {
         // retired is a type-erased pointer to some `AssocRecord<_, R>`, which stores the drop
         // context as its first field, since records are #[repr(C)]
-        let drop_ctx: *mut DropCtx = retired.cast();
-        let drop = (*drop_ctx).drop;
+        let header: *mut DynHeader<H> = retired.cast();
+        let drop = (*header).drop;
 
         drop(retired.cast());
     }
 
-    #[inline]
+    /*#[inline]
     unsafe fn convert_to_data(retired: *mut Self::Reclaimable) -> *mut () {
         let drop_ctx: *mut DropCtx = retired.cast();
         (*drop_ctx).data
@@ -153,7 +147,7 @@ unsafe impl<H: Default> Reclaim for Erased<H> {
     unsafe fn convert_to_header(retired: *mut Self::Reclaimable) -> *mut Self::Header {
         let record: *mut AssocRecord<(), Self> = retired.cast();
         &(*record).header as *const _ as *mut _
-    }
+    }*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -167,7 +161,7 @@ pub struct Leaking;
 
 unsafe impl<T> Retire<T> for Leaking {
     #[inline(always)]
-    unsafe fn retire(ptr: *mut T) -> *mut Self::Reclaimable {
+    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
         ptr.cast()
     }
 }
@@ -175,14 +169,13 @@ unsafe impl<T> Retire<T> for Leaking {
 /********** impl Reclaim **************************************************************************/
 
 unsafe impl Reclaim for Leaking {
-    type DropCtx = ();
     type Header = ();
-    type Reclaimable = ();
+    type Retired = ();
 
     #[inline(always)]
-    unsafe fn reclaim(_: *mut Self::Reclaimable) {}
+    unsafe fn reclaim(_: *mut Self::Retired) {}
 
-    #[inline(always)]
+    /*#[inline(always)]
     unsafe fn convert_to_data(retired: *mut Self::Reclaimable) -> *mut () {
         retired.cast()
     }
@@ -190,27 +183,28 @@ unsafe impl Reclaim for Leaking {
     #[inline(always)]
     unsafe fn convert_to_header(retired: *mut Self::Reclaimable) -> *mut Self::Header {
         retired.cast()
-    }
+    }*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// DropCtx
+// DynHeader
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[repr(C)]
-pub struct DropCtx {
+pub struct DynHeader<H> {
     /// Function pointer to the type-erased drop function.
     drop: unsafe fn(*mut ()),
     /// Pointer to the records's data.
     pub(crate) data: *mut (),
+    /// The header itself.
+    pub header: H,
 }
 
-/********** impl Default **************************************************************************/
+/********** impl inherent *************************************************************************/
 
-impl Default for DropCtx {
+impl<H> DynHeader<H> {
     #[inline]
-    fn default() -> Self {
-        // the drop context is only initialized when a record is retired
-        Self { drop: |_| {}, data: ptr::null_mut() }
+    pub fn new(header: H) -> Self {
+        Self { drop: |_| {}, data: ptr::null_mut(), header }
     }
 }

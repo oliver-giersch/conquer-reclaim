@@ -63,8 +63,8 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     /// Allocates a new [`Record`][crate::Record] for `val` and stores an
     /// [`Atomic`] pointer to it.
     #[inline]
-    pub fn new(val: T) -> Self {
-        Self::from(Owned::from(val))
+    pub fn new(owned: Owned<T, R, N>) -> Self {
+        Self::from(owned)
     }
 
     /// Creates a new [`Atomic`] from the given raw `ptr`.
@@ -319,6 +319,7 @@ impl<T, R, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
     }
 }
 
+/*S
 /********** impl From (T) *************************************************************************/
 
 impl<T, R: Reclaim, N: Unsigned> From<T> for Atomic<T, R, N> {
@@ -326,7 +327,7 @@ impl<T, R: Reclaim, N: Unsigned> From<T> for Atomic<T, R, N> {
     fn from(val: T) -> Self {
         Self::from(Owned::new(val))
     }
-}
+}*/
 
 /********** impl From (Owned<T>) ******************************************************************/
 
