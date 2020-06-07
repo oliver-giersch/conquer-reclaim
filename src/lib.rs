@@ -18,10 +18,10 @@ mod macros;
 #[cfg(feature = "examples")]
 pub mod examples;
 pub mod leak;
+pub mod reclaim;
 
 mod atomic;
 mod imp;
-mod reclaim;
 mod record;
 mod retired;
 mod traits;

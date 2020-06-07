@@ -43,17 +43,6 @@ impl<T, H> Default for Typed<T, H> {
     }
 }
 
-/********** impl Retire ***************************************************************************/
-
-unsafe impl<T, H> Retire<T> for Typed<T, H> {
-    #[inline]
-    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
-        // no need for conversion, ptr is retired (and reclaimed) as is, i.e., with all type
-        // information statically known
-        ptr
-    }
-}
-
 /********** impl Reclaim **************************************************************************/
 
 unsafe impl<T, H> Reclaim for Typed<T, H> {
@@ -81,6 +70,17 @@ unsafe impl<T, H> Reclaim for Typed<T, H> {
     }*/
 }
 
+/********** impl Retire ***************************************************************************/
+
+unsafe impl<T, H> Retire<T> for Typed<T, H> {
+    #[inline]
+    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
+        // no need for conversion, ptr is retired (and reclaimed) as is, i.e., with all type
+        // information statically known
+        ptr
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Erased
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -99,27 +99,6 @@ impl<H> Clone for Erased<H> {
 /********** impl Copy *****************************************************************************/
 
 impl<H> Copy for Erased<H> {}
-
-/********** impl Retire ***************************************************************************/
-
-unsafe impl<T, H> Retire<T> for Erased<H> {
-    #[inline]
-    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
-        let record = AssocRecord::<T, Self>::ptr_from_data(ptr);
-        // set the record's drop context
-        (*record).header.drop = |retired| {
-            // restore the precise type of the record
-            let record: *mut AssocRecord<T, Self> = retired.cast();
-            // drop the entire record
-            mem::drop(Box::from_raw(record));
-        };
-        (*record).header.data = ptr.cast();
-
-        // return a type erased pointer to the record with its correctly set
-        // drop context
-        record.cast()
-    }
-}
 
 /********** impl Reclaim **************************************************************************/
 
@@ -150,21 +129,33 @@ unsafe impl<H> Reclaim for Erased<H> {
     }*/
 }
 
+/********** impl Retire ***************************************************************************/
+
+unsafe impl<T, H> Retire<T> for Erased<H> {
+    #[inline]
+    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
+        let record = AssocRecord::<T, Self>::ptr_from_data(ptr);
+        // set the record's drop context
+        (*record).header.drop = |retired| {
+            // restore the precise type of the record
+            let record: *mut AssocRecord<T, Self> = retired.cast();
+            // drop the entire record
+            mem::drop(Box::from_raw(record));
+        };
+        (*record).header.data = ptr.cast();
+
+        // return a type erased pointer to the record with its correctly set
+        // drop context
+        record.cast()
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Leaking
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Copy, Clone, Debug, Default, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Leaking;
-
-/********** impl Retire ***************************************************************************/
-
-unsafe impl<T> Retire<T> for Leaking {
-    #[inline(always)]
-    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
-        ptr.cast()
-    }
-}
 
 /********** impl Reclaim **************************************************************************/
 
@@ -184,6 +175,15 @@ unsafe impl Reclaim for Leaking {
     unsafe fn convert_to_header(retired: *mut Self::Reclaimable) -> *mut Self::Header {
         retired.cast()
     }*/
+}
+
+/********** impl Retire ***************************************************************************/
+
+unsafe impl<T> Retire<T> for Leaking {
+    #[inline(always)]
+    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
+        ptr.cast()
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -206,5 +206,14 @@ impl<H> DynHeader<H> {
     #[inline]
     pub fn new(header: H) -> Self {
         Self { drop: |_| {}, data: ptr::null_mut(), header }
+    }
+}
+
+/********** impl Default **************************************************************************/
+
+impl<H: Default> Default for DynHeader<H> {
+    #[inline]
+    fn default() -> Self {
+        Self::new(H::default())
     }
 }

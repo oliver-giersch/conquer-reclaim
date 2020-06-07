@@ -29,15 +29,18 @@ unsafe impl<T, R: Reclaim, N: Unsigned> Sync for Owned<T, R, N> where T: Sync {}
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim<Header = ()>, N: Unsigned> Owned<T, R, N> {
+impl<T, R: Reclaim, N: Unsigned> Owned<T, R, N>
+where
+    R::Header: Default,
+{
     #[inline]
     pub fn new(value: T) -> Self {
-        unsafe { Self::with_header((), value) }
+        unsafe { Self::with_header(Default::default(), value) }
     }
 
     #[inline]
     pub fn with_tag(value: T, tag: usize) -> Self {
-        unsafe { Self::with_header_and_tag((), value, tag) }
+        unsafe { Self::with_header_and_tag(Default::default(), value, tag) }
     }
 }
 

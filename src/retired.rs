@@ -1,8 +1,8 @@
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
+use crate::reclaim::{DynHeader, Erased, Typed};
 use crate::traits::Reclaim;
-use crate::Retire;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Retired
@@ -15,17 +15,35 @@ pub struct Retired<T, R> {
 
 /********** impl Retired **************************************************************************/
 
-impl<T, R: Reclaim + Retire<T>> Retired<T, R> {
-    // todo: as_ptr(), data_ptr(), header_ptr()
+impl<T, H> Retired<T, Typed<T, H>> {
+    pub fn get_data_ptr(&self) -> *mut T {
+        self.ptr.as_ptr()
+    }
+}
 
+impl<H> Retired<(), Erased<H>> {
+    pub fn get_data_ptr(&self) -> *mut () {
+        let header: *mut DynHeader<H> = self.ptr.as_ptr().cast();
+        unsafe { (*header).data }
+    }
+}
+
+impl<R: Reclaim> Retired<R::Retired, R> {
     #[inline]
     pub unsafe fn reclaim(&mut self) {
-        let retired = <R as Retire<T>>::retire(self.ptr.as_ptr());
-        <R as Reclaim>::reclaim(retired);
+        <R as Reclaim>::reclaim(self.ptr.as_ptr());
+    }
+}
+
+impl<T, R: Reclaim> Retired<T, R> {
+    // todo: as_ptr(), data_ptr(), header_ptr()
+    #[inline]
+    pub fn as_ptr(&self) -> *mut () {
+        self.ptr.as_ptr().cast()
     }
 
     #[inline]
-    pub(crate) unsafe fn new_unchecked(ptr: NonNull<T>) -> Self {
-        Self { ptr, _marker: PhantomData }
+    pub(crate) unsafe fn new_unchecked(ptr: *mut T) -> Self {
+        Self { ptr: NonNull::new_unchecked(ptr), _marker: PhantomData }
     }
 }
