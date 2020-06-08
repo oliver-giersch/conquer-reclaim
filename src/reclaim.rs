@@ -58,16 +58,6 @@ unsafe impl<T, H> Reclaim for Typed<T, H> {
         let record = AssocRecord::<T, Self>::ptr_from_data(retired);
         mem::drop(Box::from_raw(record));
     }
-
-    /*#[inline]
-    unsafe fn convert_to_data(retired: *mut Self::Reclaimable) -> *mut () {
-        retired.cast()
-    }
-
-    #[inline]
-    unsafe fn convert_to_header(retired: *mut Self::Reclaimable) -> *mut Self::Header {
-        AssocRecord::<T, Self>::header_from_data(retired.cast())
-    }*/
 }
 
 /********** impl Retire ***************************************************************************/
@@ -115,18 +105,6 @@ unsafe impl<H> Reclaim for Erased<H> {
 
         drop(retired.cast());
     }
-
-    /*#[inline]
-    unsafe fn convert_to_data(retired: *mut Self::Reclaimable) -> *mut () {
-        let drop_ctx: *mut DropCtx = retired.cast();
-        (*drop_ctx).data
-    }
-
-    #[inline]
-    unsafe fn convert_to_header(retired: *mut Self::Reclaimable) -> *mut Self::Header {
-        let record: *mut AssocRecord<(), Self> = retired.cast();
-        &(*record).header as *const _ as *mut _
-    }*/
 }
 
 /********** impl Retire ***************************************************************************/
@@ -165,16 +143,6 @@ unsafe impl Reclaim for Leaking {
 
     #[inline(always)]
     unsafe fn reclaim(_: *mut Self::Retired) {}
-
-    /*#[inline(always)]
-    unsafe fn convert_to_data(retired: *mut Self::Reclaimable) -> *mut () {
-        retired.cast()
-    }
-
-    #[inline(always)]
-    unsafe fn convert_to_header(retired: *mut Self::Reclaimable) -> *mut Self::Header {
-        retired.cast()
-    }*/
 }
 
 /********** impl Retire ***************************************************************************/

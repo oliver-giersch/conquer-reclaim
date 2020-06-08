@@ -2,6 +2,7 @@ use core::marker::PhantomData;
 use core::ptr::NonNull;
 
 use crate::reclaim::{DynHeader, Erased, Typed};
+use crate::record::Record;
 use crate::traits::Reclaim;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -16,13 +17,25 @@ pub struct Retired<T, R> {
 /********** impl Retired **************************************************************************/
 
 impl<T, H> Retired<T, Typed<T, H>> {
-    pub fn get_data_ptr(&self) -> *mut T {
+    #[inline]
+    pub fn header_ptr(&self) -> *mut H {
+        unsafe { Record::<H, T>::header_from_data(self.ptr.as_ptr()) }
+    }
+
+    #[inline]
+    pub fn data_ptr(&self) -> *mut T {
         self.ptr.as_ptr()
     }
 }
 
 impl<H> Retired<(), Erased<H>> {
-    pub fn get_data_ptr(&self) -> *mut () {
+    #[inline]
+    pub fn header_ptr(&self) -> *mut DynHeader<H> {
+        self.ptr.as_ptr().cast()
+    }
+
+    #[inline]
+    pub fn data_ptr(&self) -> *mut () {
         let header: *mut DynHeader<H> = self.ptr.as_ptr().cast();
         unsafe { (*header).data }
     }
@@ -36,7 +49,6 @@ impl<R: Reclaim> Retired<R::Retired, R> {
 }
 
 impl<T, R: Reclaim> Retired<T, R> {
-    // todo: as_ptr(), data_ptr(), header_ptr()
     #[inline]
     pub fn as_ptr(&self) -> *mut () {
         self.ptr.as_ptr().cast()
