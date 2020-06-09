@@ -64,7 +64,7 @@ pub struct LeakingRef<T>(PhantomData<T>);
 
 /********** impl ReclaimRef ***********************************************************************/
 
-impl<T> ReclaimRef for LeakingRef<T> {
+unsafe impl<T> ReclaimRef for LeakingRef<T> {
     type Item = T;
     type Reclaim = Leaking;
     type LocalState = LeakingLocalState<T>;

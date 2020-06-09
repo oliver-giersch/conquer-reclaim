@@ -35,7 +35,7 @@ pub unsafe trait Retire<T>: Reclaim {
 // ReclaimRef (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait ReclaimRef: Sized {
+pub unsafe trait ReclaimRef: Sized {
     type Item: Sized;
     type Reclaim: Reclaim + Retire<Self::Item>;
 
