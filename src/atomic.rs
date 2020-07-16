@@ -17,6 +17,7 @@ pub use self::compare::Comparable;
 pub use self::store::Storable;
 
 use self::compare::Unlink;
+use crate::alias::AssocHeader;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Atomic
@@ -59,7 +60,7 @@ impl<T, R, N> Atomic<T, R, N> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, N: Unsigned> Atomic<T, R, N> {
     /// Allocates a new [`Record`][crate::Record] for `val` and stores an
     /// [`Atomic`] pointer to it.
     #[inline]
@@ -266,7 +267,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     }
 }
 
-impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, N: Unsigned> Atomic<T, R, N> {
     /// Loads a value from the pointer using `guard` to protect it from
     /// reclamation.
     ///
@@ -285,7 +286,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     #[inline]
     pub fn load<'g>(
         &self,
-        guard: &'g mut impl Protect<Item = T, Reclaim = R>,
+        guard: &'g mut impl Protect<T, Reclaim = R>,
         order: Ordering,
     ) -> Protected<'g, T, R, N> {
         guard.protect(self, order)
@@ -296,7 +297,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
     pub fn load_if_equal<'g>(
         &self,
         expected: MarkedPtr<T, N>,
-        guard: &'g mut impl Protect<Item = T, Reclaim = R>,
+        guard: &'g mut impl Protect<T, Reclaim = R>,
         order: Ordering,
     ) -> Result<Protected<'g, T, R, N>, NotEqual> {
         guard.protect_if_equal(self, expected, order)
@@ -305,7 +306,7 @@ impl<T, R: Reclaim, N: Unsigned> Atomic<T, R, N> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> Default for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, N: Unsigned> Default for Atomic<T, R, N> {
     default_null!();
 }
 
@@ -319,19 +320,21 @@ impl<T, R, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
     }
 }
 
-/*S
 /********** impl From (T) *************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> From<T> for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, N: Unsigned> From<T> for Atomic<T, R, N>
+where
+    AssocHeader<T, R>: Default,
+{
     #[inline]
     fn from(val: T) -> Self {
         Self::from(Owned::new(val))
     }
-}*/
+}
 
 /********** impl From (Owned<T>) ******************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, N: Unsigned> From<Owned<T, R, N>> for Atomic<T, R, N> {
     #[inline]
     fn from(owned: Owned<T, R, N>) -> Self {
         Self { inner: AtomicMarkedPtr::from(Owned::into_marked_ptr(owned)), _marker: PhantomData }
@@ -340,7 +343,7 @@ impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Atomic<T, R, N> {
 
 /********** impl From (Storable) ******************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> From<Storable<T, R, N>> for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, N: Unsigned> From<Storable<T, R, N>> for Atomic<T, R, N> {
     #[inline]
     fn from(storable: Storable<T, R, N>) -> Self {
         Self { inner: AtomicMarkedPtr::new(storable.into_marked_ptr()), _marker: PhantomData }
@@ -349,7 +352,7 @@ impl<T, R: Reclaim, N: Unsigned> From<Storable<T, R, N>> for Atomic<T, R, N> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.load(Ordering::SeqCst), f)

@@ -6,7 +6,8 @@ use core::sync::atomic::Ordering;
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
-use crate::traits::{Protect, Reclaim, ReclaimLocalState, ReclaimRef, Retire};
+use crate::retired::Retired;
+use crate::traits::{Protect, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState};
 use crate::NotEqual;
 
 /// A specialization of the [`Atomic`](crate::atomic::Atomic) type using
@@ -37,114 +38,87 @@ pub struct Leaking;
 
 /********** impl Reclaim **************************************************************************/
 
-unsafe impl Reclaim for Leaking {
+unsafe impl ReclaimBase for Leaking {
     type Header = ();
     type Retired = ();
 
     #[inline(always)]
-    unsafe fn reclaim(_: *mut Self::Header) {}
+    unsafe fn reclaim(_: *mut Self::Retired) {}
 }
 
 /********** impl Retire ***************************************************************************/
 
-unsafe impl<T> Retire<T> for Leaking {
+unsafe impl<T> Reclaim<T> for Leaking {
+    type Base = Leaking;
+
     #[inline(always)]
-    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired {
+    unsafe fn retire(ptr: *mut T) -> *mut () {
         ptr.cast()
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// LeakingRef
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// A no-op [`GlobalReclaimer`] that deliberately leaks memory.
-//#[derive(Debug, Default, Hash, Eq, Ord, PartialEq, PartialOrd)]
-pub struct LeakingRef<T>(PhantomData<T>);
-
 /********** impl ReclaimRef ***********************************************************************/
 
-unsafe impl<T> ReclaimRef for LeakingRef<T> {
-    type Item = T;
-    type Reclaim = Leaking;
-    type LocalState = LeakingLocalState<T>;
+unsafe impl<T> ReclaimRef<T> for Leaking {
+    type Reclaim = Self;
+    type ThreadState = Self;
 
     #[inline]
-    fn alloc_owned<N: Unsigned>(&self, value: Self::Item) -> Owned<Self::Item, N> {
-        unsafe { Owned::with_header((), value) }
+    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, N> {
+        Owned::new(value)
     }
 
-    #[inline(always)]
-    unsafe fn build_local_state(&self) -> Self::LocalState {
-        LeakingLocalState(PhantomData)
+    #[inline]
+    unsafe fn build_thread_state_unchecked(&self) -> Self::ThreadState {
+        Leaking
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// LeakingLocalState
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub struct LeakingLocalState<T>(PhantomData<T>);
-
 /********** impl LocalState ***********************************************************************/
 
-impl<T> ReclaimLocalState for LeakingLocalState<T> {
-    type Item = T;
-    type Reclaim = Leaking;
-
-    type Guard = Guard<T>;
+unsafe impl<T> ReclaimThreadState<T> for Leaking {
+    type Reclaim = Self;
+    type Guard = Guard;
 
     #[inline]
-    fn alloc_owned<N: Unsigned>(&self, value: Self::Item) -> Owned<Self::Item, N> {
-        unsafe { Owned::with_header((), value) }
-    }
-
-    #[inline(always)]
     fn build_guard(&self) -> Self::Guard {
-        Guard(PhantomData)
+        Guard
     }
 
-    #[inline(always)]
-    unsafe fn retire_record<N: Unsigned>(&self, _: Unlinked<T, N>) {}
+    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, N> {
+        Owned::new(value)
+    }
+
+    unsafe fn retire_record(&self, _: Retired<Leaking>) {}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Guard
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Copy, Debug, Default)]
-pub struct Guard<T>(PhantomData<T>);
-
-/********** impl Clone ****************************************************************************/
-
-impl<T> Clone for Guard<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Guard(PhantomData)
-    }
-}
+#[derive(Clone, Copy, Debug, Default, Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Guard;
 
 macro_rules! impl_protect {
     () => {
-        type Item = T;
         type Reclaim = Leaking;
 
         #[inline]
         fn protect<N: Unsigned>(
             &mut self,
-            atomic: &Atomic<Self::Item, N>,
+            atomic: &Atomic<T, N>,
             order: Ordering,
-        ) -> Protected<Self::Item, N> {
+        ) -> Protected<T, N> {
             Protected { inner: atomic.load_raw(order), _marker: PhantomData }
         }
 
         #[inline]
         fn protect_if_equal<N: Unsigned>(
             &mut self,
-            atomic: &Atomic<Self::Item, N>,
-            expected: MarkedPtr<Self::Item, N>,
+            atomic: &Atomic<T, N>,
+            expected: MarkedPtr<T, N>,
             order: Ordering,
-        ) -> Result<Protected<Self::Item, N>, NotEqual> {
+        ) -> Result<Protected<T, N>, NotEqual> {
             atomic
                 .load_raw_if_equal(expected, order)
                 .map(|inner| Protected { inner, _marker: PhantomData })
@@ -154,12 +128,12 @@ macro_rules! impl_protect {
 
 /********** impl Protect (Guard) ******************************************************************/
 
-unsafe impl<T> Protect for Guard<T> {
+unsafe impl<T> Protect<T> for Guard {
     impl_protect!();
 }
 
 /********** impl Protect (&Guard) *****************************************************************/
 
-unsafe impl<T> Protect for &Guard<T> {
+unsafe impl<T> Protect<T> for &Guard {
     impl_protect!();
 }

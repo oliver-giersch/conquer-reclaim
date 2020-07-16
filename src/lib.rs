@@ -1,16 +1,11 @@
 //! TODO: crate lvl docs...
 
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
+#![cfg_attr(feature = "nightly", feature(unsize))]
 // #![warn(missing_docs)] todo: re-enable
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
-
-pub mod prelude {
-    //! TODO: docs...
-
-    pub use crate::traits::{Protect, Reclaim, ReclaimLocalState, ReclaimRef};
-}
 
 #[macro_use]
 mod macros;
@@ -20,6 +15,7 @@ pub mod examples;
 pub mod leak;
 pub mod reclaim;
 
+mod alias;
 mod atomic;
 mod imp;
 mod record;
@@ -37,7 +33,7 @@ use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
 pub use crate::retired::Retired;
-pub use crate::traits::{AssocReclaim, Protect, Reclaim, ReclaimLocalState, ReclaimRef, Retire};
+pub use crate::traits::{Protect, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Maybe
@@ -67,7 +63,7 @@ pub enum Maybe<P> {
 /// When an [`Owned`] instance goes out scope, the entire [`Record`] will be
 /// de-allocated.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub struct Owned<T, R: Reclaim, N: Unsigned> {
+pub struct Owned<T, R: Reclaim<T>, N: Unsigned> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(T, R)>,
 }
@@ -87,8 +83,8 @@ pub struct Protected<'g, T, R, N> {
 
 /// A local shared reference to a protected value that supports pointer tagging.
 ///
-/// Instances of `Shared` are derived from guard types (see [`Protect`] and
-/// [`ProtectRegion`]) from which they inherit their lifetime dependence.
+/// Instances of `Shared` are derived from guard types (see [`Protect`]) from
+/// which they inherit their lifetime dependence.
 /// Like regular shared references (`&'g T`) they can be trivially copied,
 /// cloned, de-referenced and can not be `null`.
 ///

@@ -5,7 +5,6 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::atomic::Storable;
-use crate::traits::Reclaim;
 use crate::Unprotected;
 
 /********** impl Clone ****************************************************************************/
@@ -62,12 +61,12 @@ impl<T, R, N> Default for Unprotected<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> fmt::Debug for Unprotected<T, R, N> {
+impl<T, R, N: Unsigned> fmt::Debug for Unprotected<T, R, N> {
     impl_fmt_debug!(Unprotected);
 }
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> fmt::Pointer for Unprotected<T, R, N> {
+impl<T, R, N: Unsigned> fmt::Pointer for Unprotected<T, R, N> {
     impl_fmt_pointer!();
 }

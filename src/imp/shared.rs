@@ -30,7 +30,7 @@ impl<T, R, N> Shared<'_, T, R, N> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
+impl<'g, T, R: Reclaim<T>, N: Unsigned> Shared<'g, T, R, N> {
     impl_from_ptr!();
     impl_from_non_null!();
     impl_common!();
@@ -49,7 +49,6 @@ impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
     /// ```
     /// use core::sync::atomic::Ordering;
     ///
-    /// use conquer_reclaim::prelude::*;
     /// use conquer_reclaim::leak::{Atomic, Guard, Owned, Shared};
     /// use conquer_reclaim::typenum::U0;
     ///
@@ -61,7 +60,7 @@ impl<'g, T, R: Reclaim, N: Unsigned> Shared<'g, T, R, N> {
     /// static GLOBAL: Atomic<Foo, U0> = Atomic::null();
     ///
     /// // ...in thread 1
-    /// let mut owned = Owned::with_header(Default::default());
+    /// let mut owned = Owned::new(Default::default());
     /// owned.bar = -1;
     ///
     /// GLOBAL.store(owned, Ordering::Release);
@@ -113,6 +112,6 @@ impl<T: fmt::Debug, R, N: Unsigned + 'static> fmt::Debug for Shared<'_, T, R, N>
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned + 'static> fmt::Pointer for Shared<'_, T, R, N> {
+impl<T, R, N: Unsigned + 'static> fmt::Pointer for Shared<'_, T, R, N> {
     impl_fmt_pointer!();
 }

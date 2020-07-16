@@ -60,7 +60,7 @@ impl<T, R, N: Unsigned> fmt::Debug for Storable<T, R, N> {
 
 /********** impl From (Owned) *********************************************************************/
 
-impl<T, R: Reclaim, N: Unsigned> From<Owned<T, R, N>> for Storable<T, R, N> {
+impl<T, R: Reclaim<T>, N: Unsigned> From<Owned<T, R, N>> for Storable<T, R, N> {
     #[inline]
     fn from(owned: Owned<T, R, N>) -> Self {
         let storable = Self { inner: owned.inner.into(), _marker: PhantomData };

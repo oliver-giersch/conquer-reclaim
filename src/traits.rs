@@ -1,63 +1,63 @@
 use core::sync::atomic::Ordering;
 
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
+use crate::alias::{AssocReclaimBase, RetiredRecord};
 use crate::atomic::Atomic;
-use crate::{NotEqual, Owned, Protected, Unlinked};
+use crate::{NotEqual, Owned, Protected, Retired};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// AssocReclaim (type alias)
+// ReclaimBase (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub type AssocReclaim<R> = <R as ReclaimRef>::Reclaim;
+pub unsafe trait ReclaimBase {
+    type Header: Sized;
+    type Retired: ?Sized;
+
+    #[inline]
+    unsafe fn reclaim(retired: *mut Self::Retired) {
+        let record = RetiredRecord::<Self>::record_from_data(retired);
+        Box::from_raw(record);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Reclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait Reclaim: Sized {
-    type Header: Sized;
-    type Retired: Sized;
+pub unsafe trait Reclaim<T> {
+    type Base: ReclaimBase;
 
-    unsafe fn reclaim(retired: *mut Self::Retired);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Retire (trait)
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub unsafe trait Retire<T>: Reclaim {
-    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired;
+    unsafe fn retire(ptr: *mut T) -> *mut <Self::Base as ReclaimBase>::Retired;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // ReclaimRef (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait ReclaimRef: Sized {
-    type Item: Sized;
-    type Reclaim: Reclaim + Retire<Self::Item>;
+pub unsafe trait ReclaimRef<T> {
+    type Reclaim: Reclaim<T>;
+    type ThreadState: ReclaimThreadState<T, Reclaim = Self::Reclaim>;
 
-    type LocalState: ReclaimLocalState<Item = Self::Item, Reclaim = Self::Reclaim>;
-
-    fn alloc_owned<N: Unsigned>(&self, value: Self::Item) -> Owned<Self::Item, Self::Reclaim, N>;
-    unsafe fn build_local_state(&self) -> Self::LocalState;
+    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, Self::Reclaim, N>;
+    unsafe fn build_thread_state_unchecked(&self) -> Self::ThreadState;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// ReclaimLocalState (trait)
+// ReclaimThreadState (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait ReclaimLocalState {
-    type Item: Sized;
-    type Reclaim: Reclaim;
+pub unsafe trait ReclaimThreadState<T> {
+    type Reclaim: Reclaim<T>;
+    type Guard: Protect<T, Reclaim = Self::Reclaim>;
 
-    type Guard: Protect<Item = Self::Item, Reclaim = Self::Reclaim>;
-
-    fn alloc_owned<N: Unsigned>(&self, value: Self::Item) -> Owned<Self::Item, Self::Reclaim, N>;
     fn build_guard(&self) -> Self::Guard;
-    unsafe fn retire_record<N: Unsigned>(&self, unlinked: Unlinked<Self::Item, Self::Reclaim, N>);
+    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, Self::Reclaim, N>;
+    unsafe fn retire_record(&self, retired: Retired<AssocReclaimBase<T, Self::Reclaim>>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -66,10 +66,9 @@ pub trait ReclaimLocalState {
 
 /// A trait for implementing guard types associated with a specific [`Reclaim`]
 /// mechanism.
-pub unsafe trait Protect: Clone {
-    type Item;
+pub unsafe trait Protect<T>: Clone {
     /// The associated [`Reclaim`] mechanism.
-    type Reclaim: Reclaim;
+    type Reclaim: Reclaim<T>;
 
     /// Loads and protects the value currently stored in `src` and returns a
     /// protected [`Shared`] pointer to it.
@@ -77,9 +76,9 @@ pub unsafe trait Protect: Clone {
     /// `protect` takes an [`Ordering`] argument...
     fn protect<N: Unsigned>(
         &mut self,
-        atomic: &Atomic<Self::Item, Self::Reclaim, N>,
+        atomic: &Atomic<T, Self::Reclaim, N>,
         order: Ordering,
-    ) -> Protected<Self::Item, Self::Reclaim, N>;
+    ) -> Protected<T, Self::Reclaim, N>;
 
     /// Loads and protects the value currently stored in `src` if it equals the
     /// `expected` value and returns a protected [`Shared`] pointer to it.
@@ -87,8 +86,8 @@ pub unsafe trait Protect: Clone {
     /// `protect_if_equal` takes an [`Ordering`] argument...
     fn protect_if_equal<N: Unsigned>(
         &mut self,
-        atomic: &Atomic<Self::Item, Self::Reclaim, N>,
-        expected: MarkedPtr<Self::Item, N>,
+        atomic: &Atomic<T, Self::Reclaim, N>,
+        expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<Protected<Self::Item, Self::Reclaim, N>, NotEqual>;
+    ) -> Result<Protected<T, Self::Reclaim, N>, NotEqual>;
 }

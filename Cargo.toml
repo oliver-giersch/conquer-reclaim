@@ -18,6 +18,8 @@ default = ["std"]
 examples = ["conquer-util/align"]
 # adds debug capabilities to the data structures enabled by "examples"
 examples-debug = ["examples"]
+# additional features requiring a nightly compiler
+nightly = []
 
 # must be disabled for use in no_std crates
 std = []
