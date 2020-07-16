@@ -41,9 +41,6 @@ pub struct Leaking;
 unsafe impl ReclaimBase for Leaking {
     type Header = ();
     type Retired = ();
-
-    #[inline(always)]
-    unsafe fn reclaim(_: *mut Self::Retired) {}
 }
 
 /********** impl Retire ***************************************************************************/

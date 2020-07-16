@@ -26,8 +26,8 @@ impl<R: ReclaimBase> Retired<R> {
 
     #[inline]
     pub unsafe fn reclaim(&mut self) {
-        todo!("move reclaim logic here")
-        //<R as ReclaimBase>::reclaim(self.ptr.as_ptr());
+        let record = RetiredRecord::<R>::record_from_data(self.ptr.as_ptr());
+        Box::from_raw(record);
     }
 
     #[inline]
