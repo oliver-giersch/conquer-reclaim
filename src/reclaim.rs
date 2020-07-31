@@ -21,9 +21,10 @@ unsafe impl<T, R: ReclaimBase<Retired = T>> Reclaim<T> for TypedReclaim<R> {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// TypedReclaim
+// ErasedReclaim
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#[cfg(feature = "nightly")]
 pub struct ErasedReclaim<R>(R);
 
 /********** impl Reclaim **************************************************************************/
@@ -35,7 +36,8 @@ where
 {
     type Base = R;
 
-    unsafe fn retire(ptr: *mut T) -> *mut <Self::Base as ReclaimBase>::Retired {
+    #[inline(always)]
+    unsafe fn retire(ptr: *mut T) -> *mut R::Retired {
         ptr as _
     }
 }

@@ -31,7 +31,7 @@ pub use conquer_pointer::typenum;
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
-pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
+pub use crate::atomic::{Atomic, CmpExchangeErr, Comparable, Storable};
 pub use crate::retired::Retired;
 pub use crate::traits::{Protect, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState};
 

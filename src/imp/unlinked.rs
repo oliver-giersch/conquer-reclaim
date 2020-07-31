@@ -6,7 +6,6 @@ use core::ptr;
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
-use crate::alias::AssocReclaimBase;
 use crate::retired::Retired;
 use crate::traits::Reclaim;
 
@@ -26,7 +25,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> Unlinked<T, R, N> {
     impl_common!();
 
     #[inline]
-    pub fn into_retired(self) -> Retired<AssocReclaimBase<T, R>> {
+    pub fn into_retired(self) -> Retired<R::Base> {
         let ptr = self.inner.decompose_ptr();
         unsafe {
             let retired = <R as Reclaim<T>>::retire(ptr);

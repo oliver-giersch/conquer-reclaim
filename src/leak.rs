@@ -82,10 +82,12 @@ unsafe impl<T> ReclaimThreadState<T> for Leaking {
         Guard
     }
 
+    #[inline]
     fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, N> {
         Owned::new(value)
     }
 
+    #[inline]
     unsafe fn retire_record(&self, _: Retired<Leaking>) {}
 }
 
