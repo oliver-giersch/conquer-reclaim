@@ -1,5 +1,4 @@
-#[cfg(feature = "nightly")]
-use core::marker::Unsize;
+use core::any::Any;
 
 use crate::traits::{Reclaim, ReclaimBase};
 
@@ -7,13 +6,24 @@ use crate::traits::{Reclaim, ReclaimBase};
 // TypedReclaim
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct TypedReclaim<R>(R);
+pub struct TypedReclaim<R>(pub R);
+
+/********** impl ReclaimBase **********************************************************************/
+
+unsafe impl<R> ReclaimBase for TypedReclaim<R>
+where
+    R: ReclaimBase,
+{
+    type Header = R::Header;
+    type Retired = R::Retired;
+}
 
 /********** impl Reclaim **************************************************************************/
 
-unsafe impl<T, R: ReclaimBase<Retired = T>> Reclaim<T> for TypedReclaim<R> {
-    type Base = R;
-
+unsafe impl<T, R> Reclaim<T> for TypedReclaim<R>
+where
+    R: ReclaimBase<Retired = T>,
+{
     #[inline(always)]
     unsafe fn retire(ptr: *mut T) -> *mut T {
         ptr
@@ -24,20 +34,26 @@ unsafe impl<T, R: ReclaimBase<Retired = T>> Reclaim<T> for TypedReclaim<R> {
 // ErasedReclaim
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(feature = "nightly")]
-pub struct ErasedReclaim<R>(R);
+pub struct ErasedReclaim<R>(pub R);
+
+/********** impl ReclaimBase **********************************************************************/
+
+unsafe impl<R> ReclaimBase for ErasedReclaim<R>
+where
+    R: ReclaimBase<Retired = dyn Any>,
+{
+    type Header = R::Header;
+    type Retired = dyn Any;
+}
 
 /********** impl Reclaim **************************************************************************/
 
-#[cfg(feature = "nightly")]
-unsafe impl<T, R: ReclaimBase> Reclaim<T> for ErasedReclaim<R>
+unsafe impl<T: 'static, R> Reclaim<T> for ErasedReclaim<R>
 where
-    T: Unsize<R::Retired>,
+    R: ReclaimBase<Retired = dyn Any>,
 {
-    type Base = R;
-
     #[inline(always)]
-    unsafe fn retire(ptr: *mut T) -> *mut R::Retired {
+    unsafe fn retire(ptr: *mut T) -> *mut dyn Any {
         ptr as _
     }
 }

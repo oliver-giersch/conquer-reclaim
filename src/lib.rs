@@ -1,9 +1,7 @@
 //! TODO: crate lvl docs...
 
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
-#![cfg_attr(feature = "nightly", feature(unsize))]
 // #![warn(missing_docs)] todo: re-enable
-
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 

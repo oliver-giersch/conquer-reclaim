@@ -25,7 +25,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> Unlinked<T, R, N> {
     impl_common!();
 
     #[inline]
-    pub fn into_retired(self) -> Retired<R::Base> {
+    pub fn into_retired(self) -> Retired<R> {
         let ptr = self.inner.decompose_ptr();
         unsafe {
             let retired = <R as Reclaim<T>>::retire(ptr);

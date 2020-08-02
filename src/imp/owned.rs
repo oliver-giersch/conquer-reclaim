@@ -17,7 +17,7 @@ cfg_if::cfg_if! {
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
-use crate::alias::{AssocHeader, AssocRecord};
+use crate::alias::AssocRecord;
 use crate::atomic::Storable;
 use crate::record::Record;
 use crate::traits::Reclaim;
@@ -32,7 +32,7 @@ unsafe impl<T, R: Reclaim<T>, N: Unsigned> Sync for Owned<T, R, N> where T: Sync
 
 impl<T, R: Reclaim<T>, N: Unsigned> Owned<T, R, N>
 where
-    AssocHeader<T, R>: Default,
+    R::Header: Default,
 {
     #[inline]
     pub fn new(value: T) -> Self {
@@ -54,7 +54,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> Owned<T, R, N> {
     /// The `header` must be in a state that allows correct reclamation
     /// handling, as defined by the reclamation mechanism itself.
     #[inline]
-    pub unsafe fn with_header(header: AssocHeader<T, R>, value: T) -> Self {
+    pub unsafe fn with_header(header: R::Header, value: T) -> Self {
         Self {
             inner: MarkedNonNull::compose_unchecked(Self::alloc_record(header, value), 0),
             _marker: PhantomData,
@@ -86,7 +86,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> Owned<T, R, N> {
     /// assert_eq!((&"string", 0b1), shared.unwrap().decompose_ref());
     /// ```
     #[inline]
-    pub unsafe fn with_header_and_tag(header: AssocHeader<T, R>, value: T, tag: usize) -> Self {
+    pub unsafe fn with_header_and_tag(header: R::Header, value: T, tag: usize) -> Self {
         Self {
             inner: MarkedNonNull::compose_unchecked(Self::alloc_record(header, value), tag),
             _marker: PhantomData,
@@ -182,7 +182,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> Owned<T, R, N> {
     /// Allocates a records wrapping `owned` and returns the pointer to the
     /// wrapped value.
     #[inline]
-    fn alloc_record(header: AssocHeader<T, R>, value: T) -> NonNull<T> {
+    fn alloc_record(header: R::Header, value: T) -> NonNull<T> {
         let record = Box::leak(Box::new(Record { header, data: value }));
         NonNull::from(&record.data)
     }

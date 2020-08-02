@@ -6,7 +6,7 @@ use alloc::boxed::Box;
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
-use crate::alias::AssocReclaimBase;
+//use crate::alias::AssocReclaimBase;
 use crate::atomic::Atomic;
 use crate::{NotEqual, Owned, Protected, Retired};
 
@@ -23,10 +23,8 @@ pub unsafe trait ReclaimBase {
 // Reclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait Reclaim<T> {
-    type Base: ReclaimBase;
-
-    unsafe fn retire(ptr: *mut T) -> *mut <Self::Base as ReclaimBase>::Retired;
+pub unsafe trait Reclaim<T>: ReclaimBase {
+    unsafe fn retire(ptr: *mut T) -> *mut Self::Retired;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -51,7 +49,7 @@ pub unsafe trait ReclaimThreadState<T> {
 
     fn build_guard(&self) -> Self::Guard;
     fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, Self::Reclaim, N>;
-    unsafe fn retire_record(&self, retired: Retired<AssocReclaimBase<T, Self::Reclaim>>);
+    unsafe fn retire_record(&self, retired: Retired<Self::Reclaim>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

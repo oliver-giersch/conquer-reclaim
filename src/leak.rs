@@ -46,8 +46,6 @@ unsafe impl ReclaimBase for Leaking {
 /********** impl Retire ***************************************************************************/
 
 unsafe impl<T> Reclaim<T> for Leaking {
-    type Base = Leaking;
-
     #[inline(always)]
     unsafe fn retire(ptr: *mut T) -> *mut () {
         ptr.cast()

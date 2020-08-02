@@ -17,7 +17,6 @@ pub use self::compare::Comparable;
 pub use self::store::Storable;
 
 use self::compare::Unlink;
-use crate::alias::AssocHeader;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Atomic
@@ -322,7 +321,7 @@ impl<T, R, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
 
 impl<T, R: Reclaim<T>, N: Unsigned> From<T> for Atomic<T, R, N>
 where
-    AssocHeader<T, R>: Default,
+    R::Header: Default,
 {
     #[inline]
     fn from(val: T) -> Self {
