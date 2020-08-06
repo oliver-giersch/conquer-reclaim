@@ -6,8 +6,8 @@ use alloc::boxed::Box;
 use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
-//use crate::alias::AssocReclaimBase;
 use crate::atomic::Atomic;
+use crate::alias::RetiredRecord;
 use crate::{NotEqual, Owned, Protected, Retired};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -17,6 +17,12 @@ use crate::{NotEqual, Owned, Protected, Retired};
 pub unsafe trait ReclaimBase {
     type Header: Sized;
     type Retired: ?Sized;
+
+    #[inline]
+    unsafe fn reclaim(retired: *mut Self::Retired) {
+        let record = RetiredRecord::<Self>::record_from_data(retired);
+        Box::from_raw(record);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
