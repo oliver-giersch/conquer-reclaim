@@ -1,20 +1,20 @@
 use core::any::Any;
 
 use crate::alias::RetiredRecord;
-use crate::record::Record;
 use crate::traits::{Reclaim, ReclaimBase};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// DynReclaim (trait)
+// DynReclaim
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait DynReclaim {
-    type Header: Sized;
-}
+pub struct DynReclaim<R: ReclaimBase>(pub R);
 
 /********** impl ReclaimBase **********************************************************************/
 
-unsafe impl<R: DynReclaim> ReclaimBase for R {
+unsafe impl<R> ReclaimBase for DynReclaim<R>
+where
+    R: ReclaimBase<Retired = dyn Any>
+{
     type Header = DynHeader<R::Header>;
     type Retired = dyn Any;
 
@@ -28,11 +28,14 @@ unsafe impl<R: DynReclaim> ReclaimBase for R {
 
 /********** impl Reclaim **************************************************************************/
 
-unsafe impl<T: 'static, R: DynReclaim + ReclaimBase<Retired = dyn Any>> Reclaim<T> for R {
+unsafe impl<T: 'static, R> Reclaim<T> for DynReclaim<R>
+where
+    R: ReclaimBase<Retired = dyn Any>
+{
     #[inline]
     unsafe fn retire(ptr: *mut T) -> *mut dyn Any {
-        let record: *mut Record<DynHeader<<R as DynReclaim>::Header>, T> = Record::header_from_data(ptr);
-        (*record).header.drop_fn = |retired| {
+        let record = RetiredRecord::<DynReclaim<R>>::header_from_data(ptr);
+        (*record).drop_fn = |retired| {
             Box::from_raw(retired as *mut T);
         };
         ptr as _
