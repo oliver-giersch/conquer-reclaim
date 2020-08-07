@@ -11,11 +11,11 @@ mod macros;
 #[cfg(feature = "examples")]
 pub mod examples;
 pub mod leak;
-pub mod reclaim;
 
 mod alias;
 mod atomic;
 mod imp;
+mod reclaim;
 mod record;
 mod retired;
 mod traits;
@@ -30,6 +30,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, CmpExchangeErr, Comparable, Storable};
+pub use crate::reclaim::{DynHeader, DynReclaim};
 pub use crate::retired::Retired;
 pub use crate::traits::{Protect, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState};
 
