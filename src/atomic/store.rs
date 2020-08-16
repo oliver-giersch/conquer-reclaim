@@ -6,7 +6,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
 use crate::traits::Reclaim;
-use crate::{Owned, Shared};
+use crate::{Owned, Protected, Shared};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Storable
@@ -66,6 +66,15 @@ impl<T, R: Reclaim<T>, N: Unsigned> From<Owned<T, R, N>> for Storable<T, R, N> {
         let storable = Self { inner: owned.inner.into(), _marker: PhantomData };
         mem::forget(owned);
         storable
+    }
+}
+
+/********** impl From (Protected) *****************************************************************/
+
+impl<T, R, N> From<Protected<'_, T, R, N>> for Storable<T, R, N> {
+    #[inline]
+    fn from(protected: Protected<'_, T, R, N>) -> Self {
+        Self { inner: protected.inner, _marker: PhantomData }
     }
 }
 

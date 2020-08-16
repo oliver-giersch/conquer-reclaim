@@ -36,14 +36,14 @@ pub type Unprotected<T, N> = crate::Unprotected<T, Leaking, N>;
 #[derive(Debug, Default, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Leaking;
 
-/********** impl Reclaim **************************************************************************/
+/********** impl ReclaimBase **********************************************************************/
 
 unsafe impl ReclaimBase for Leaking {
     type Header = ();
     type Retired = ();
 }
 
-/********** impl Retire ***************************************************************************/
+/********** impl Reclaim **************************************************************************/
 
 unsafe impl<T> Reclaim<T> for Leaking {
     #[inline(always)]
@@ -58,34 +58,34 @@ unsafe impl<T> ReclaimRef<T> for Leaking {
     type Reclaim = Self;
     type ThreadState = Self;
 
-    #[inline]
+    #[inline(always)]
     fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, N> {
         Owned::new(value)
     }
 
-    #[inline]
+    #[inline(always)]
     unsafe fn build_thread_state_unchecked(&self) -> Self::ThreadState {
         Leaking
     }
 }
 
-/********** impl LocalState ***********************************************************************/
+/********** impl ReclaimThreadState ***************************************************************/
 
 unsafe impl<T> ReclaimThreadState<T> for Leaking {
     type Reclaim = Self;
     type Guard = Guard;
 
-    #[inline]
+    #[inline(always)]
     fn build_guard(&self) -> Self::Guard {
         Guard
     }
 
-    #[inline]
+    #[inline(always)]
     fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, N> {
         Owned::new(value)
     }
 
-    #[inline]
+    #[inline(always)]
     unsafe fn retire_record(&self, _: Retired<Leaking>) {}
 }
 

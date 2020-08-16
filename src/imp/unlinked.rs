@@ -34,7 +34,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> Unlinked<T, R, N> {
     }
 
     #[inline]
-    pub unsafe fn take<U>(&self, take: impl (FnOnce(&T) -> &ManuallyDrop<U>) + 'static) -> U {
+    pub unsafe fn take<U>(&self, take: impl (FnOnce(&T) -> &ManuallyDrop<U>)) -> U {
         let src = take(self.as_ref());
         ptr::read(&**src)
     }

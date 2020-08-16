@@ -14,8 +14,9 @@ pub mod leak;
 
 mod alias;
 mod atomic;
+mod erased;
+mod fused;
 mod imp;
-mod reclaim;
 mod record;
 mod retired;
 mod traits;
@@ -30,9 +31,11 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, CmpExchangeErr, Comparable, Storable};
-pub use crate::reclaim::{DynHeader, DynReclaim};
+pub use crate::erased::{DynHeader, DynReclaim};
 pub use crate::retired::Retired;
-pub use crate::traits::{Protect, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState};
+pub use crate::traits::{
+    Protect, ProtectExt, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState,
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Maybe

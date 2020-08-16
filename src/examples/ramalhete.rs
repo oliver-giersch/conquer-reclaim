@@ -3,13 +3,49 @@ use core::mem::{ManuallyDrop, MaybeUninit};
 use core::ptr;
 use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "std")] {
+        use std::sync::Arc;
+    } else {
+        use alloc::sync::Arc;
+    }
+}
+
 use conquer_util::align::Aligned128 as CacheLineAligned;
 
-use crate::{AssocReclaim, Owned, ReclaimLocalState, ReclaimRef, Retire};
+use crate::{ReclaimRef, ReclaimThreadState};
 
 type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
+type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
 
 const NODE_SIZE: usize = 1024;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// ArcQueue
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct ArcQueue<T, R: ReclaimRef<Node<T, R>>> {
+    inner: Arc<Queue<T, R>>,
+    thread_state: ManuallyDrop<R::ThreadState>,
+}
+
+/*********** impl Send ****************************************************************************/
+
+unsafe impl<T, R: ReclaimRef<Node<T, R>>> Send for ArcQueue<T, R> {}
+
+/*********** impl Clone ***************************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcQueue<T, R> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            thread_state: ManuallyDrop::new(unsafe {
+                self.inner.reclaim.build_thread_state_unchecked()
+            }),
+        }
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Queue
@@ -19,28 +55,22 @@ const NODE_SIZE: usize = 1024;
 ///
 /// The implementation is based on an algorithm by Andreia Correia and Pedro
 /// Ramalhete.
-pub struct Queue<T, R: ReclaimRef> {
+pub struct Queue<T, R: ReclaimRef<Node<T, R>>> {
     head: CacheLineAligned<Atomic<Node<T, R>, R::Reclaim>>,
     tail: CacheLineAligned<Atomic<Node<T, R>, R::Reclaim>>,
-    reclaimer: R,
+    reclaim: R,
 }
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: ReclaimRef<Item = Node<T, R>> + Default> Queue<T, R>
-where
-    AssocReclaim<R>: Retire<Node<T, R>>,
-{
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Queue<T, R> {
     #[inline]
     pub fn new() -> Self {
-        Self::with_reclaimer(Default::default())
+        Self::with_reclaim(Default::default())
     }
 }
 
-impl<T, R: ReclaimRef<Item = Node<T, R>>> Queue<T, R>
-where
-    AssocReclaim<R>: Retire<Node<T, R>>,
-{
+impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
     /// The list consists of linked array nodes and this constant defines the
     /// size of each array.
     pub const NODE_SIZE: usize = NODE_SIZE;
@@ -48,12 +78,12 @@ where
 
     /// Creates a new empty queue.
     #[inline]
-    pub fn with_reclaimer(reclaimer: R) -> Self {
-        let node = Owned::leak(reclaimer.alloc_owned(Node::new()));
+    pub fn with_reclaim(reclaim: R) -> Self {
+        let node = Owned::leak(reclaim.alloc_owned(Node::new()));
         Self {
             head: CacheLineAligned::new(Atomic::from(node)),
             tail: CacheLineAligned::new(Atomic::from(node)),
-            reclaimer,
+            reclaim,
         }
     }
 
@@ -64,8 +94,8 @@ where
     /// The `local_state` must have been derived from this queue's specific
     /// [`Reclaim`] instance.
     #[inline]
-    pub unsafe fn is_empty_unchecked(&self, local_state: &R::LocalState) -> bool {
-        let mut guard = local_state.build_guard();
+    pub unsafe fn is_empty_unchecked(&self, thread_state: &R::ThreadState) -> bool {
+        let mut guard = thread_state.build_guard();
         let head = self.head().load(&mut guard, Ordering::Acquire).shared_unchecked();
         head.as_ref().is_empty()
     }
@@ -77,9 +107,9 @@ where
     /// The `local_state` must have been derived from this queue's specific
     /// [`Reclaim`] instance.
     #[inline]
-    pub unsafe fn push_unchecked(&self, elem: T, local_state: &R::LocalState) {
+    pub unsafe fn push_unchecked(&self, elem: T, thread_state: &R::ThreadState) {
         let elem = ManuallyDrop::new(elem);
-        let mut guard = local_state.build_guard();
+        let mut guard = thread_state.build_guard();
         loop {
             let tail = self.tail().load(&mut guard, Ordering::Acquire).shared_unchecked();
 
@@ -95,7 +125,7 @@ where
 
                 let next = tail.as_ref().next.load_unprotected(Ordering::Acquire);
                 if next.is_null() {
-                    let node = Owned::leak(local_state.alloc_owned(Node::with_tentative(&elem)));
+                    let node = Owned::leak(thread_state.alloc_owned(Node::with_tentative(&elem)));
                     if tail.as_ref().next.compare_exchange(next, node, Self::REL_RLX).is_ok() {
                         let _ = self.tail().compare_exchange(tail, node, Self::REL_RLX);
                         return;
@@ -118,8 +148,8 @@ where
     /// The `local_state` must have been derived from this queue's specific
     /// [`Reclaim`] instance.
     #[inline]
-    pub unsafe fn pop_unchecked(&self, local_state: &R::LocalState) -> Option<T> {
-        let mut guard = local_state.build_guard();
+    pub unsafe fn pop_unchecked(&self, thread_state: &R::ThreadState) -> Option<T> {
+        let mut guard = thread_state.build_guard();
         loop {
             let head = self.head().load(&mut guard, Ordering::Acquire).shared_unchecked();
             if head.as_ref().is_empty() {
@@ -141,7 +171,7 @@ where
                 if let Ok(unlinked) =
                     self.head().compare_exchange(head, next.assume_storable(), Self::REL_RLX)
                 {
-                    local_state.retire_record(unlinked);
+                    thread_state.retire_record(unlinked.into_retired());
                 }
             }
         }
@@ -162,41 +192,38 @@ where
 // QueueRef
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct QueueRef<'q, T, R: ReclaimRef> {
+pub struct QueueRef<'q, T, R: ReclaimRef<Node<T, R>>> {
     queue: &'q Queue<T, R>,
-    reclaim_local_state: R::LocalState,
+    thread_state: R::ThreadState,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<'q, T, R: ReclaimRef> QueueRef<'q, T, R> {
+impl<'q, T, R: ReclaimRef<Node<T, R>>> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
-        Self { queue, reclaim_local_state: unsafe { queue.reclaimer.build_local_state() } }
+        Self { queue, thread_state: unsafe { queue.reclaim.build_thread_state_unchecked() } }
     }
 }
 
-impl<'q, T, R: ReclaimRef<Item = Node<T, R>>> QueueRef<'q, T, R>
-where
-    AssocReclaim<R>: Retire<Node<T, R>>,
-{
+impl<'q, T, R: ReclaimRef<Node<T, R>>> QueueRef<'q, T, R> {
     /// Returns `true` if the queue is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        unsafe { self.queue.is_empty_unchecked(&self.reclaim_local_state) }
+        unsafe { self.queue.is_empty_unchecked(&self.thread_state) }
     }
 
     /// Pushes `elem` to the tail of the queue.
     #[inline]
     pub fn push(&self, elem: T) {
-        unsafe { self.queue.push_unchecked(elem, &self.reclaim_local_state) }
+        unsafe { self.queue.push_unchecked(elem, &self.thread_state) }
     }
 
     /// Pops an element from the head of the queue and returns it or `None`, if
     /// the queue is empty.
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.queue.pop_unchecked(&self.reclaim_local_state) }
+        unsafe { self.queue.pop_unchecked(&self.thread_state) }
     }
 }
 
@@ -205,7 +232,7 @@ where
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[repr(C)]
-pub struct Node<T, R: ReclaimRef> {
+pub struct Node<T, R: ReclaimRef<Self>> {
     pop_idx: AtomicU32,
     slots: [Slot<T>; NODE_SIZE],
     push_idx: AtomicU32,
@@ -214,7 +241,7 @@ pub struct Node<T, R: ReclaimRef> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: ReclaimRef> Node<T, R> {
+impl<T, R: ReclaimRef<Self>> Node<T, R> {
     #[inline]
     fn new() -> Self {
         Self {

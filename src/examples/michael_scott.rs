@@ -21,7 +21,7 @@ type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
 
 pub struct ArcQueue<T, R: ReclaimRef<Node<T, R>>> {
     inner: Arc<Queue<T, R>>,
-    reclaim_local_state: ManuallyDrop<R::ThreadState>,
+    thread_state: ManuallyDrop<R::ThreadState>,
 }
 
 /*********** impl Send ****************************************************************************/
@@ -35,8 +35,8 @@ impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcQueue<T, R> {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
-            reclaim_local_state: ManuallyDrop::new(unsafe {
-                self.inner.reclaimer.build_thread_state_unchecked()
+            thread_state: ManuallyDrop::new(unsafe {
+                self.inner.reclaim.build_thread_state_unchecked()
             }),
         }
     }
@@ -47,26 +47,26 @@ impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcQueue<T, R> {
 impl<T, R: ReclaimRef<Node<T, R>> + Default> ArcQueue<T, R> {
     #[inline]
     pub fn new() -> Self {
-        Self::with_reclaimer(Default::default())
+        Self::with_reclaim(Default::default())
     }
 }
 
 impl<T, R: ReclaimRef<Node<T, R>>> ArcQueue<T, R> {
     #[inline]
-    pub fn with_reclaimer(reclaimer: R) -> Self {
-        let inner = Arc::new(Queue::<_, R>::with_reclaimer(reclaimer));
-        let reclaim_local_state = unsafe { inner.reclaimer.build_thread_state_unchecked() };
-        Self { inner, reclaim_local_state: ManuallyDrop::new(reclaim_local_state) }
+    pub fn with_reclaim(reclaimer: R) -> Self {
+        let inner = Arc::new(Queue::<_, R>::with_reclaim(reclaimer));
+        let thread_state = unsafe { inner.reclaim.build_thread_state_unchecked() };
+        Self { inner, thread_state: ManuallyDrop::new(thread_state) }
     }
 
     #[inline]
     pub fn push(&self, elem: T) {
-        unsafe { self.inner.push_unchecked(elem, &*self.reclaim_local_state) }
+        unsafe { self.inner.push_unchecked(elem, &*self.thread_state) }
     }
 
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.inner.pop_unchecked(&self.reclaim_local_state) }
+        unsafe { self.inner.pop_unchecked(&self.thread_state) }
     }
 }
 
@@ -85,7 +85,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Drop for ArcQueue<T, R> {
     #[inline]
     fn drop(&mut self) {
         // safety: Drop Local state before the `Arc`, because it may hold a pointer into it.
-        unsafe { ManuallyDrop::drop(&mut self.reclaim_local_state) };
+        unsafe { ManuallyDrop::drop(&mut self.thread_state) };
     }
 }
 
@@ -95,10 +95,10 @@ impl<T, R: ReclaimRef<Node<T, R>>> From<Queue<T, R>> for ArcQueue<T, R> {
     #[inline]
     fn from(queue: Queue<T, R>) -> Self {
         let inner = Arc::new(queue);
-        let reclaim_local_state =
-            ManuallyDrop::new(unsafe { inner.reclaimer.build_thread_state_unchecked() });
+        let thread_state =
+            ManuallyDrop::new(unsafe { inner.reclaim.build_thread_state_unchecked() });
 
-        Self { inner, reclaim_local_state }
+        Self { inner, thread_state }
     }
 }
 
@@ -113,7 +113,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> From<Queue<T, R>> for ArcQueue<T, R> {
 pub struct Queue<T, R: ReclaimRef<Node<T, R>>> {
     head: Atomic<Node<T, R>, R::Reclaim>,
     tail: Atomic<Node<T, R>, R::Reclaim>,
-    reclaimer: R,
+    reclaim: R,
 }
 
 /********** impl inherent *************************************************************************/
@@ -121,27 +121,28 @@ pub struct Queue<T, R: ReclaimRef<Node<T, R>>> {
 impl<T, R: ReclaimRef<Node<T, R>> + Default> Queue<T, R> {
     #[inline]
     pub fn new() -> Self {
-        Self::with_reclaimer(Default::default())
+        Self::with_reclaim(Default::default())
     }
 }
 
 impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
     const REL_RLX: (Ordering, Ordering) = (Release, Relaxed);
 
+    /// Creates a new empty queue.
     #[inline]
-    pub fn with_reclaimer(reclaimer: R) -> Self {
-        let sentinel = Owned::leak(reclaimer.alloc_owned(Node::sentinel()));
+    pub fn with_reclaim(reclaim: R) -> Self {
+        let sentinel = Owned::leak(reclaim.alloc_owned(Node::sentinel()));
         Self {
             head: Atomic::<_, R::Reclaim>::from(sentinel),
             tail: Atomic::<_, R::Reclaim>::from(sentinel),
-            reclaimer,
+            reclaim,
         }
     }
 
     #[inline]
-    pub unsafe fn push_unchecked(&self, elem: T, local_state: &R::ThreadState) {
-        let node = Owned::leak(local_state.alloc_owned(Node::new(elem)));
-        let mut guard = local_state.build_guard();
+    pub unsafe fn push_unchecked(&self, elem: T, thread_state: &R::ThreadState) {
+        let node = Owned::leak(thread_state.alloc_owned(Node::new(elem)));
+        let mut guard = thread_state.build_guard();
         loop {
             let tail = self.tail.load(&mut guard, Acquire);
             let next = tail.deref().next.load_unprotected(Relaxed);
@@ -161,9 +162,9 @@ impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
     }
 
     #[inline]
-    pub unsafe fn pop_unchecked(&self, local_state: &R::ThreadState) -> Option<T> {
-        let mut head_guard = local_state.build_guard();
-        let mut next_guard = local_state.build_guard();
+    pub unsafe fn pop_unchecked(&self, thread_state: &R::ThreadState) -> Option<T> {
+        let mut head_guard = thread_state.build_guard();
+        let mut next_guard = thread_state.build_guard();
 
         // safety: head can never be null
         let mut head = self.head.load(&mut head_guard, Acquire).shared_unchecked();
@@ -175,7 +176,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
                     // safety: The previous head is no longer visible for other threads and since
                     // `elem` won't be dropped when the node is reclaimed it doesn't matter if it
                     // outlives any internal references.
-                    local_state.retire_record(unlinked.into_retired());
+                    thread_state.retire_record(unlinked.into_retired());
 
                     return res;
                 }
@@ -222,7 +223,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Drop for Queue<T, R> {
 
 pub struct QueueRef<'q, T, R: ReclaimRef<Node<T, R>>> {
     queue: &'q Queue<T, R>,
-    reclaimer_local_state: R::ThreadState,
+    thread_state: R::ThreadState,
 }
 
 /********** impl inherent *************************************************************************/
@@ -230,20 +231,17 @@ pub struct QueueRef<'q, T, R: ReclaimRef<Node<T, R>>> {
 impl<'q, T, R: ReclaimRef<Node<T, R>>> QueueRef<'q, T, R> {
     #[inline]
     pub fn new(queue: &'q Queue<T, R>) -> Self {
-        Self {
-            queue,
-            reclaimer_local_state: unsafe { queue.reclaimer.build_thread_state_unchecked() },
-        }
+        Self { queue, thread_state: unsafe { queue.reclaim.build_thread_state_unchecked() } }
     }
 
     #[inline]
     pub fn push(&self, elem: T) {
-        unsafe { self.queue.push_unchecked(elem, &self.reclaimer_local_state) }
+        unsafe { self.queue.push_unchecked(elem, &self.thread_state) }
     }
 
     #[inline]
     pub fn pop(&self) -> Option<T> {
-        unsafe { self.queue.pop_unchecked(&self.reclaimer_local_state) }
+        unsafe { self.queue.pop_unchecked(&self.thread_state) }
     }
 }
 

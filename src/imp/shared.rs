@@ -5,7 +5,7 @@ use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::traits::Reclaim;
-use crate::Shared;
+use crate::{Protected, Shared};
 
 /********** impl Clone ****************************************************************************/
 
@@ -34,6 +34,11 @@ impl<'g, T, R: Reclaim<T>, N: Unsigned> Shared<'g, T, R, N> {
     impl_from_ptr!();
     impl_from_non_null!();
     impl_common!();
+
+    #[inline]
+    pub fn into_protected(self) -> Protected<'g, T, R, N> {
+        Protected { inner: self.inner.into_marked_ptr(), _marker: PhantomData }
+    }
 
     /// De-references the [`Shared`] reference.
     ///
@@ -106,12 +111,12 @@ impl<'g, T, R: Reclaim<T>, N: Unsigned> Shared<'g, T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T: fmt::Debug, R, N: Unsigned + 'static> fmt::Debug for Shared<'_, T, R, N> {
+impl<T: fmt::Debug, R, N: Unsigned> fmt::Debug for Shared<'_, T, R, N> {
     impl_fmt_debug!(Shared);
 }
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R, N: Unsigned + 'static> fmt::Pointer for Shared<'_, T, R, N> {
+impl<T, R, N: Unsigned> fmt::Pointer for Shared<'_, T, R, N> {
     impl_fmt_pointer!();
 }

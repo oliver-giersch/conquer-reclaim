@@ -2,7 +2,6 @@ use core::cmp;
 use core::fmt;
 use core::ptr::NonNull;
 
-use crate::alias::RetiredRecord;
 use crate::traits::ReclaimBase;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -18,12 +17,12 @@ pub struct Retired<R: ReclaimBase> {
 impl<R: ReclaimBase> Retired<R> {
     #[inline]
     pub fn as_ptr(&self) -> *mut () {
-        self.ptr.as_ptr().cast()
+        unsafe { R::as_data_ptr(self.ptr.as_ptr()) }
     }
 
     #[inline]
     pub fn header_ptr(&self) -> *mut R::Header {
-        unsafe { RetiredRecord::<R>::header_from_data(self.ptr.as_ptr()) }
+        unsafe { R::as_header_ptr(self.ptr.as_ptr()) }
     }
 
     #[inline]
