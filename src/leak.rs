@@ -3,7 +3,6 @@
 use core::marker::PhantomData;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
 use crate::retired::Retired;
@@ -12,22 +11,22 @@ use crate::NotEqual;
 
 /// A specialization of the [`Atomic`](crate::atomic::Atomic) type using
 /// [`Leaking`] as reclaimer.
-pub type Atomic<T, N> = crate::atomic::Atomic<T, Leaking, N>;
+pub type Atomic<T, const N: usize> = crate::atomic::Atomic<T, Leaking, N>;
 /// A specialization of the [`Owned`](crate::Owned) type using [`Leaking`] as
 /// reclaimer.
-pub type Owned<T, N> = crate::Owned<T, Leaking, N>;
+pub type Owned<T, const N: usize> = crate::Owned<T, Leaking, N>;
 /// A specialization of the [`Protected`](crate::Protected) type using
 /// [`Leaking`] as reclaimer.
-pub type Protected<'g, T, N> = crate::Protected<'g, T, Leaking, N>;
+pub type Protected<'g, T, const N: usize> = crate::Protected<'g, T, Leaking, N>;
 /// A specialization of the [`Shared`](crate::Shared) type using [`Leaking`] as
 /// reclaimer.
-pub type Shared<'g, T, N> = crate::Shared<'g, T, Leaking, N>;
+pub type Shared<'g, T, const N: usize> = crate::Shared<'g, T, Leaking, N>;
 /// A specialization of the [`Unlinked`](crate::Unlinked) type using [`Leaking`]
 /// as reclaimer.
-pub type Unlinked<T, N> = crate::Unlinked<T, Leaking, N>;
+pub type Unlinked<T, const N: usize> = crate::Unlinked<T, Leaking, N>;
 /// A specialization of the [`Unprotected`](crate::Unprotected) type using
 /// [`Leaking`] as reclaimer.
-pub type Unprotected<T, N> = crate::Unprotected<T, Leaking, N>;
+pub type Unprotected<T, const N: usize> = crate::Unprotected<T, Leaking, N>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Leaking
@@ -59,7 +58,7 @@ unsafe impl<T> ReclaimRef<T> for Leaking {
     type ThreadState = Self;
 
     #[inline(always)]
-    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, N> {
+    fn alloc_owned<const N: usize>(&self, value: T) -> Owned<T, N> {
         Owned::new(value)
     }
 
@@ -81,7 +80,7 @@ unsafe impl<T> ReclaimThreadState<T> for Leaking {
     }
 
     #[inline(always)]
-    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, N> {
+    fn alloc_owned<const N: usize>(&self, value: T) -> Owned<T, N> {
         Owned::new(value)
     }
 
@@ -101,7 +100,7 @@ macro_rules! impl_protect {
         type Reclaim = Leaking;
 
         #[inline]
-        fn protect<N: Unsigned>(
+        fn protect<const N: usize>(
             &mut self,
             atomic: &Atomic<T, N>,
             order: Ordering,
@@ -110,7 +109,7 @@ macro_rules! impl_protect {
         }
 
         #[inline]
-        fn protect_if_equal<N: Unsigned>(
+        fn protect_if_equal<const N: usize>(
             &mut self,
             atomic: &Atomic<T, N>,
             expected: MarkedPtr<T, N>,

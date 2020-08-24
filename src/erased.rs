@@ -6,11 +6,45 @@ use crate::traits::ReclaimBase;
 
 type RetiredRecord<R, T> = crate::record::Record<<R as ReclaimBase>::Header, T>;
 
+/********** macros ********************************************************************************/
+
+#[macro_export]
+macro_rules! impl_dyn_erased_reclaim {
+    ($reclaim:ty, $header:ty) => {
+        unsafe impl $crate::ReclaimBase for $reclaim {
+            type Header = $header;
+            type Retired = $crate::DynErased;
+
+            #[inline]
+            unsafe fn reclaim(retired: *mut $crate::DynErased) {
+                <Self as $crate::DynReclaim<$header>>::reclaim(retired);
+            }
+
+            #[inline(always)]
+            unsafe fn as_data_ptr(retired: *mut $crate::DynErased) -> *mut dyn core::any::Any {
+                <Self as $crate::DynReclaim<$header>>::as_data_ptr(retired);
+            }
+
+            #[inline(always)]
+            unsafe fn as_header_ptr(retired: *mut $crate::DynErased) -> *mut $header {
+                <Self as $crate::DynReclaim<$header>>::as_header_ptr(retired)
+            }
+        }
+
+        unsafe impl<T: 'static> $crate::Reclaim<T> for $reclaim {
+            #[inline]
+            unsafe fn retire(ptr: *mut T) -> *mut $crate::DynErased {
+                <Self as $crate::DynReclaim<$header>>::retire(ptr)
+            }
+        }
+    };
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // DynReclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub unsafe trait DynReclaim<H>:
+pub unsafe trait DynReclaim<H: 'static>:
     ReclaimBase<Header = DynHeader<H>, Retired = DynErased>
 {
     #[inline]
@@ -28,13 +62,13 @@ pub unsafe trait DynReclaim<H>:
         mem::drop(Box::from(record));
     }
 
-    #[inline]
+    #[inline(always)]
     unsafe fn as_data_ptr(retired: *mut DynErased) -> *mut dyn Any {
         let header = retired as *mut DynHeader<H>;
         (*header).data_ptr
     }
 
-    #[inline]
+    #[inline(always)]
     unsafe fn as_header_ptr(retired: *mut DynErased) -> *mut Self::Header {
         retired as *mut _
     }
@@ -42,7 +76,7 @@ pub unsafe trait DynReclaim<H>:
 
 /********** blanket impl **************************************************************************/
 
-unsafe impl<H, R> DynReclaim<H> for R where
+unsafe impl<H: 'static, R> DynReclaim<H> for R where
     R: ReclaimBase<Header = DynHeader<H>, Retired = DynErased>
 {
 }

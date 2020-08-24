@@ -7,7 +7,6 @@ use core::mem::ManuallyDrop;
 use core::ptr;
 use core::sync::atomic::Ordering;
 
-use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{AtomicMarkedPtr, MarkedNonNull, MarkedPtr, Null};
 
 use crate::traits::{Protect, Reclaim};
@@ -31,14 +30,14 @@ use self::compare::Unlink;
 /// Use the (unsafe) [`take`][Atomic::take] method to extract an (optional)
 /// [`Owned`] value, which *does* correctly deallocate memory when it goes out
 /// of scope.
-pub struct Atomic<T, R, N> {
+pub struct Atomic<T, R, const N: usize> {
     inner: AtomicMarkedPtr<T, N>,
     _marker: PhantomData<(T, R)>,
 }
 
 /********** impl inherent (const) *****************************************************************/
 
-impl<T, R, N> Atomic<T, R, N> {
+impl<T, R, const N: usize> Atomic<T, R, N> {
     /// Creates a new `null` pointer.
     #[inline]
     pub const fn null() -> Self {
@@ -59,7 +58,7 @@ impl<T, R, N> Atomic<T, R, N> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim<T>, N: Unsigned> Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
     /// Allocates a new [`Record`][crate::Record] for `val` and stores an
     /// [`Atomic`] pointer to it.
     #[inline]
@@ -303,13 +302,13 @@ impl<T, R: Reclaim<T>, N: Unsigned> Atomic<T, R, N> {
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: Reclaim<T>, N: Unsigned> Default for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, const N: usize> Default for Atomic<T, R, N> {
     default_null!();
 }
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
+impl<T, R, const N: usize> fmt::Debug for Atomic<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (ptr, tag) = self.inner.load(Ordering::SeqCst).decompose();
@@ -319,7 +318,7 @@ impl<T, R, N: Unsigned> fmt::Debug for Atomic<T, R, N> {
 
 /********** impl From (T) *************************************************************************/
 
-impl<T, R: Reclaim<T>, N: Unsigned> From<T> for Atomic<T, R, N>
+impl<T, R: Reclaim<T>, const N: usize> From<T> for Atomic<T, R, N>
 where
     R::Header: Default,
 {
@@ -331,7 +330,7 @@ where
 
 /********** impl From (Owned<T>) ******************************************************************/
 
-impl<T, R: Reclaim<T>, N: Unsigned> From<Owned<T, R, N>> for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, const N: usize> From<Owned<T, R, N>> for Atomic<T, R, N> {
     #[inline]
     fn from(owned: Owned<T, R, N>) -> Self {
         Self { inner: AtomicMarkedPtr::from(Owned::into_marked_ptr(owned)), _marker: PhantomData }
@@ -340,7 +339,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> From<Owned<T, R, N>> for Atomic<T, R, N> {
 
 /********** impl From (Storable) ******************************************************************/
 
-impl<T, R: Reclaim<T>, N: Unsigned> From<Storable<T, R, N>> for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, const N: usize> From<Storable<T, R, N>> for Atomic<T, R, N> {
     #[inline]
     fn from(storable: Storable<T, R, N>) -> Self {
         Self { inner: AtomicMarkedPtr::new(storable.into_marked_ptr()), _marker: PhantomData }
@@ -349,7 +348,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> From<Storable<T, R, N>> for Atomic<T, R, N> 
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R: Reclaim<T>, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {
+impl<T, R: Reclaim<T>, const N: usize> fmt::Pointer for Atomic<T, R, N> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Pointer::fmt(&self.inner.load(Ordering::SeqCst), f)
@@ -361,7 +360,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> fmt::Pointer for Atomic<T, R, N> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub struct CmpExchangeErr<S, T, R, N> {
+pub struct CmpExchangeErr<S, T, R, const N: usize> {
     pub loaded: Unprotected<T, R, N>,
     pub input: S,
 }

@@ -1,7 +1,6 @@
 use core::fmt;
 use core::marker::PhantomData;
 
-use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr, Null};
 
 use crate::{Maybe, Protected, Shared, Unlinked, Unprotected};
@@ -13,14 +12,14 @@ use crate::{Maybe, Protected, Shared, Unlinked, Unprotected};
 /// A raw, nullable and potentially marked pointer type this is associated to a
 /// [`Reclaimer`][crate::Reclaim] and can be used as the compare argument for
 /// a *compare-and-swap* operation.
-pub struct Comparable<T, R, N> {
+pub struct Comparable<T, R, const N: usize> {
     inner: MarkedPtr<T, N>,
     _marker: PhantomData<R>,
 }
 
 /********** impl Clone ****************************************************************************/
 
-impl<T, R, N> Clone for Comparable<T, R, N> {
+impl<T, R, const N: usize> Clone for Comparable<T, R, N> {
     #[inline]
     fn clone(&self) -> Self {
         Self { inner: self.inner, _marker: PhantomData }
@@ -29,11 +28,11 @@ impl<T, R, N> Clone for Comparable<T, R, N> {
 
 /********** impl Copy *****************************************************************************/
 
-impl<T, R, N> Copy for Comparable<T, R, N> {}
+impl<T, R, const N: usize> Copy for Comparable<T, R, N> {}
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R, N> Comparable<T, R, N> {
+impl<T, R, const N: usize> Comparable<T, R, N> {
     /// Creates a new `null` pointer.
     #[inline]
     pub const fn null() -> Self {
@@ -55,13 +54,13 @@ impl<T, R, N> Comparable<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Debug for Comparable<T, R, N> {
+impl<T, R, const N: usize> fmt::Debug for Comparable<T, R, N> {
     impl_fmt_debug!(Comparable);
 }
 
 /********** impl From (Protected) *****************************************************************/
 
-impl<T, R, N> From<Protected<'_, T, R, N>> for Comparable<T, R, N> {
+impl<T, R, const N: usize> From<Protected<'_, T, R, N>> for Comparable<T, R, N> {
     #[inline]
     fn from(protected: Protected<'_, T, R, N>) -> Self {
         Self { inner: protected.inner, _marker: PhantomData }
@@ -70,7 +69,7 @@ impl<T, R, N> From<Protected<'_, T, R, N>> for Comparable<T, R, N> {
 
 /********** impl From (Shared) ********************************************************************/
 
-impl<T, R, N> From<Shared<'_, T, R, N>> for Comparable<T, R, N> {
+impl<T, R, const N: usize> From<Shared<'_, T, R, N>> for Comparable<T, R, N> {
     #[inline]
     fn from(shared: Shared<'_, T, R, N>) -> Self {
         Self { inner: shared.inner.into_marked_ptr(), _marker: PhantomData }
@@ -79,7 +78,7 @@ impl<T, R, N> From<Shared<'_, T, R, N>> for Comparable<T, R, N> {
 
 /********** impl From (Unprotected) ***************************************************************/
 
-impl<T, R, N> From<Unprotected<T, R, N>> for Comparable<T, R, N> {
+impl<T, R, const N: usize> From<Unprotected<T, R, N>> for Comparable<T, R, N> {
     #[inline]
     fn from(unprotected: Unprotected<T, R, N>) -> Self {
         Self { inner: unprotected.inner, _marker: PhantomData }
@@ -88,7 +87,7 @@ impl<T, R, N> From<Unprotected<T, R, N>> for Comparable<T, R, N> {
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Pointer for Comparable<T, R, N> {
+impl<T, R, const N: usize> fmt::Pointer for Comparable<T, R, N> {
     impl_fmt_pointer!();
 }
 
@@ -109,7 +108,7 @@ pub trait Unlink {
 
 /********** impl Protected ************************************************************************/
 
-impl<T, R, N: Unsigned> Unlink for Protected<'_, T, R, N> {
+impl<T, R, const N: usize> Unlink for Protected<'_, T, R, N> {
     type Unlinked = Maybe<Unlinked<T, R, N>>;
 
     #[inline]
@@ -120,7 +119,7 @@ impl<T, R, N: Unsigned> Unlink for Protected<'_, T, R, N> {
 
 /********** impl Shared ***************************************************************************/
 
-impl<T, R, N: Unsigned> Unlink for Shared<'_, T, R, N> {
+impl<T, R, const N: usize> Unlink for Shared<'_, T, R, N> {
     type Unlinked = Unlinked<T, R, N>;
 
     #[inline]
@@ -131,7 +130,7 @@ impl<T, R, N: Unsigned> Unlink for Shared<'_, T, R, N> {
 
 /********** impl Unprotected **********************************************************************/
 
-impl<T, R, N: Unsigned> Unlink for Unprotected<T, R, N> {
+impl<T, R, const N: usize> Unlink for Unprotected<T, R, N> {
     type Unlinked = Maybe<Unlinked<T, R, N>>;
 
     #[inline]

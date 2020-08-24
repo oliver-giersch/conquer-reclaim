@@ -12,8 +12,8 @@ cfg_if::cfg_if! {
 
 use crate::{Maybe, ReclaimRef, ReclaimThreadState};
 
-type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
-type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
+type Atomic<T, R> = crate::Atomic<T, R, 0>;
+type Owned<T, R> = crate::Owned<T, R, 0>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // ArcQueue

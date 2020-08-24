@@ -1,5 +1,6 @@
 //! TODO: crate lvl docs...
 
+#![feature(min_const_generics, set_ptr_value)]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 // #![warn(missing_docs)] todo: re-enable
 #[cfg(not(feature = "std"))]
@@ -19,19 +20,19 @@ mod fused;
 mod imp;
 mod record;
 mod retired;
+#[macro_use]
 mod traits;
 
 use core::marker::PhantomData;
 
+use conquer_pointer::{MarkedNonNull, MarkedPtr};
+
 // public re-exports
 pub use conquer_pointer;
-pub use conquer_pointer::typenum;
-
-use conquer_pointer::typenum::Unsigned;
-use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 pub use crate::atomic::{Atomic, CmpExchangeErr, Comparable, Storable};
 pub use crate::erased::{DynHeader, DynReclaim};
+pub use crate::fused::{FusedGuard, FusedGuardRef};
 pub use crate::retired::Retired;
 pub use crate::traits::{
     Protect, ProtectExt, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState,
@@ -65,7 +66,7 @@ pub enum Maybe<P> {
 /// When an [`Owned`] instance goes out scope, the entire [`Record`] will be
 /// de-allocated.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub struct Owned<T, R: Reclaim<T>, N: Unsigned> {
+pub struct Owned<T, R: Reclaim<T>, const N: usize> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(T, R)>,
 }
@@ -74,7 +75,7 @@ pub struct Owned<T, R: Reclaim<T>, N: Unsigned> {
 // Protected (impl in imp/protected.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Protected<'g, T, R, N> {
+pub struct Protected<'g, T, R, const N: usize> {
     inner: MarkedPtr<T, N>,
     _marker: PhantomData<(Option<&'g T>, R)>,
 }
@@ -92,7 +93,7 @@ pub struct Protected<'g, T, R, N> {
 ///
 /// See the documentation for [`deref`][Shared::deref] for an explanation of the
 /// safety concerns involved in de-referencing a `Shared`.
-pub struct Shared<'g, T, R, N> {
+pub struct Shared<'g, T, R, const N: usize> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(&'g T, R)>,
 }
@@ -116,7 +117,7 @@ pub struct Shared<'g, T, R, N> {
 /// [cex]: Atomic::compare_exchange
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 #[must_use = "unlinked values are meant to be retired, otherwise a memory leak is highly likely"]
-pub struct Unlinked<T, R, N> {
+pub struct Unlinked<T, R, const N: usize> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(T, R)>,
 }
@@ -135,7 +136,7 @@ pub struct Unlinked<T, R, N> {
 /// `Unprotected` is guaranteed to point at an (at least) once valid instance of
 /// type `T`.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub struct Unprotected<T, R, N> {
+pub struct Unprotected<T, R, const N: usize> {
     inner: MarkedPtr<T, N>,
     _marker: PhantomData<R>,
 }

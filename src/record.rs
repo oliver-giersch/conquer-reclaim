@@ -32,20 +32,11 @@ impl<H, T: ?Sized> Record<H, T> {
     pub unsafe fn record_from_data(data: *mut T) -> *mut Self {
         // pointer is cast to a pointer to an unsized `Record<H, dyn ..>`, but
         // in fact still points at the record's `data` field
-        let mut ptr = data as *mut Self;
+        let ptr = data as *mut Self;
         // header is the "correct" thin pointer, since the header field is at
         // offset 0
-        let header = Self::header_from_data(data) as *mut ();
-        {
-            // create a pointer to the fat pointer's "data" half
-            // this is the dangerous part, since the layout of fat pointers to
-            // trait objects is not actually guaranteed in any way, but is
-            // currently implemented this way
-            let data_ptr = &mut ptr as *mut *mut Self as *mut *mut ();
-            *data_ptr = header;
-        }
-
-        ptr
+        let header = Self::header_from_data(data) as *mut u8;
+        ptr.set_ptr_value(header)
     }
 
     /// Returns the pointer to the [`header`][Record::header] field of the

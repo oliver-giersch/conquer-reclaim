@@ -15,8 +15,8 @@ use conquer_util::align::Aligned128 as CacheLineAligned;
 
 use crate::{ReclaimRef, ReclaimThreadState};
 
-type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U0>;
-type Owned<T, R> = crate::Owned<T, R, crate::typenum::U0>;
+type Atomic<T, R> = crate::Atomic<T, R, 0>;
+type Owned<T, R> = crate::Owned<T, R, 0>;
 
 const NODE_SIZE: usize = 1024;
 

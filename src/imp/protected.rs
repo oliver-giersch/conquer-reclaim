@@ -1,7 +1,6 @@
 use core::fmt;
 use core::marker::PhantomData;
 
-use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr, Null};
 
 use crate::traits::Reclaim;
@@ -9,7 +8,7 @@ use crate::{Maybe, Protected, Shared};
 
 /********** impl Clone ****************************************************************************/
 
-impl<T, R, N> Clone for Protected<'_, T, R, N> {
+impl<T, R, const N: usize> Clone for Protected<'_, T, R, N> {
     #[inline]
     fn clone(&self) -> Self {
         Self { inner: self.inner, _marker: PhantomData }
@@ -18,11 +17,11 @@ impl<T, R, N> Clone for Protected<'_, T, R, N> {
 
 /********** impl Copy *****************************************************************************/
 
-impl<T, R, N> Copy for Protected<'_, T, R, N> {}
+impl<T, R, const N: usize> Copy for Protected<'_, T, R, N> {}
 
 /********** impl inherent (const) *****************************************************************/
 
-impl<T, R, N> Protected<'_, T, R, N> {
+impl<T, R, const N: usize> Protected<'_, T, R, N> {
     /// Creates a new `null` pointer.
     #[inline]
     pub const fn null() -> Self {
@@ -37,7 +36,7 @@ impl<T, R, N> Protected<'_, T, R, N> {
 
 /********** impl inherent *************************************************************************/
 
-impl<'g, T, R: Reclaim<T>, N: Unsigned> Protected<'g, T, R, N> {
+impl<'g, T, R: Reclaim<T>, const N: usize> Protected<'g, T, R, N> {
     impl_from_ptr_for_nullable!();
     impl_from_non_null!();
 
@@ -79,18 +78,18 @@ impl<'g, T, R: Reclaim<T>, N: Unsigned> Protected<'g, T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Debug for Protected<'_, T, R, N> {
+impl<T, R, const N: usize> fmt::Debug for Protected<'_, T, R, N> {
     impl_fmt_debug!(Protected);
 }
 
 /********** impl Default **************************************************************************/
 
-impl<T, R, N> Default for Protected<'_, T, R, N> {
+impl<T, R, const N: usize> Default for Protected<'_, T, R, N> {
     default_null!();
 }
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Pointer for Protected<'_, T, R, N> {
+impl<T, R, const N: usize> fmt::Pointer for Protected<'_, T, R, N> {
     impl_fmt_pointer!();
 }

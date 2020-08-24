@@ -5,7 +5,6 @@ use core::sync::atomic::Ordering;
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 
-use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
 use crate::alias::RetiredRecord;
@@ -13,12 +12,46 @@ use crate::atomic::Atomic;
 use crate::fused::FusedGuardRef;
 use crate::{Maybe, NotEqual, Owned, Protected, Retired, Shared};
 
+/********** macros ********************************************************************************/
+
+#[macro_export]
+macro_rules! impl_typed_reclaim {
+    ($reclaim:ty, $header:ty) => {
+        unsafe impl<T> $crate::ReclaimBase for $reclaim {
+            type Header = $header;
+            type Retired = T;
+        }
+
+        unsafe impl<T> $crate::Reclaim<T> for $reclaim {
+            #[inline(always)]
+            unsafe fn retire(ptr: *mut T) -> *mut T { ptr }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! impl_dyn_reclaim {
+    ($reclaim:ty, $header:ty) => {
+        unsafe impl $crate::ReclaimBase for $reclaim {
+            type Header = $header;
+            type Retired = core::any::Any;
+        }
+
+        unsafe impl<T> $crate::Reclaim<T> for $reclaim {
+            #[inline(always)]
+            unsafe fn retire(ptr: *mut T) -> *mut dyn core::any::Any {
+                ptr as *mut _
+            }
+        }
+    };
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // ReclaimBase (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub unsafe trait ReclaimBase: Sync + Sized {
-    type Header: Sized;
+    type Header: Sized + 'static;
     type Retired: ?Sized;
 
     #[inline]
@@ -54,7 +87,7 @@ pub unsafe trait ReclaimRef<T>: Sync + Sized {
     type Reclaim: Reclaim<T>;
     type ThreadState: ReclaimThreadState<T, Reclaim = Self::Reclaim>;
 
-    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, Self::Reclaim, N>;
+    fn alloc_owned<const N: usize>(&self, value: T) -> Owned<T, Self::Reclaim, N>;
     unsafe fn build_thread_state_unchecked(&self) -> Self::ThreadState;
 }
 
@@ -68,7 +101,7 @@ where
     type ThreadState = <R::Target as ReclaimRef<T>>::ThreadState;
 
     #[inline]
-    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, Self::Reclaim, N> {
+    fn alloc_owned<const N: usize>(&self, value: T) -> Owned<T, Self::Reclaim, N> {
         (**self).alloc_owned(value)
     }
 
@@ -87,7 +120,7 @@ pub unsafe trait ReclaimThreadState<T> {
     type Guard: Protect<T, Reclaim = Self::Reclaim> + ProtectExt<T>;
 
     fn build_guard(&self) -> Self::Guard;
-    fn alloc_owned<N: Unsigned>(&self, value: T) -> Owned<T, Self::Reclaim, N>;
+    fn alloc_owned<const N: usize>(&self, value: T) -> Owned<T, Self::Reclaim, N>;
     unsafe fn retire_record(&self, retired: Retired<Self::Reclaim>);
 }
 
@@ -105,7 +138,7 @@ pub unsafe trait Protect<T>: Clone {
     /// protected [`Shared`] pointer to it.
     ///
     /// `protect` takes an [`Ordering`] argument...
-    fn protect<N: Unsigned>(
+    fn protect<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         order: Ordering,
@@ -115,7 +148,7 @@ pub unsafe trait Protect<T>: Clone {
     /// `expected` value and returns a protected [`Shared`] pointer to it.
     ///
     /// `protect_if_equal` takes an [`Ordering`] argument...
-    fn protect_if_equal<N: Unsigned>(
+    fn protect_if_equal<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         expected: MarkedPtr<T, N>,
@@ -128,18 +161,18 @@ pub unsafe trait Protect<T>: Clone {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub trait ProtectExt<T>: Protect<T> {
-    fn adopt<'g, N: Unsigned>(
+    fn adopt<'g, const N: usize>(
         &'g mut self,
         fused: FusedGuardRef<'_, T, Self, N>,
     ) -> Shared<'g, T, Self::Reclaim, N>;
 
-    fn protect_and_fuse_ref<N: Unsigned>(
+    fn protect_fused_ref<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         order: Ordering,
     ) -> Maybe<FusedGuardRef<T, Self, N>>;
 
-    fn protect_and_fuse_ref_if_equal<N: Unsigned>(
+    fn protect_fused_ref_if_equal<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         expected: MarkedPtr<T, N>,
@@ -154,7 +187,7 @@ where
     G: Protect<T>,
 {
     #[inline]
-    fn adopt<'g, N: Unsigned>(
+    fn adopt<'g, const N: usize>(
         &'g mut self,
         fused: FusedGuardRef<'_, T, Self, N>,
     ) -> Shared<'g, T, Self::Reclaim, N> {
@@ -163,7 +196,7 @@ where
     }
 
     #[inline]
-    fn protect_and_fuse_ref<N: Unsigned>(
+    fn protect_fused_ref<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         order: Ordering,
@@ -178,7 +211,7 @@ where
     }
 
     #[inline]
-    fn protect_and_fuse_ref_if_equal<N: Unsigned>(
+    fn protect_fused_ref_if_equal<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         expected: MarkedPtr<T, N>,

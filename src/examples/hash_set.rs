@@ -19,10 +19,10 @@ cfg_if::cfg_if! {
 
 use crate::{Maybe, Protect, ProtectExt, ReclaimRef, ReclaimThreadState};
 
-type Atomic<T, R> = crate::Atomic<T, R, crate::typenum::U1>;
-type Owned<T, R> = crate::Owned<T, R, crate::typenum::U1>;
-type Protected<'g, T, R> = crate::Protected<'g, T, R, crate::typenum::U1>;
-type Shared<'g, T, R> = crate::Shared<'g, T, R, crate::typenum::U1>;
+type Atomic<T, R> = crate::Atomic<T, R, 1>;
+type Owned<T, R> = crate::Owned<T, R, 1>;
+type Protected<'g, T, R> = crate::Protected<'g, T, R, 1>;
+type Shared<'g, T, R> = crate::Shared<'g, T, R, 1>;
 
 type AssocGuard<T, R> = <<R as ReclaimRef<T>>::ThreadState as ReclaimThreadState<T>>::Guard;
 
@@ -124,8 +124,7 @@ where
     {
         'retry: loop {
             let mut prev = &self.head;
-            while let Maybe::Some(fused) = guards.curr.protect_and_fuse_ref(prev, Ordering::Acquire)
-            {
+            while let Maybe::Some(fused) = guards.curr.protect_fused_ref(prev, Ordering::Acquire) {
                 let (curr, tag) = fused.as_shared().split_tag();
                 if tag == Self::DELETE_TAG {
                     continue 'retry;
@@ -150,6 +149,9 @@ where
                                 Err(_) => continue 'retry,
                             }
                         } else {
+                            // SAFETY: using `cast` on the returned values is an unfortunate escape
+                            // hatch, which is required because the compiler is not smart enough to
+                            // recognize that returning these values is actually sound
                             match curr.as_ref().elem.borrow().cmp(val) {
                                 Equal => {
                                     return FindResult::Found {
@@ -167,6 +169,8 @@ where
                                 _ => {}
                             }
 
+                            // transfering the responsibility for protecting the current node to
+                            // `prev` allows using `curr` to be used again in the next iteration
                             let curr = guards.prev.adopt(fused);
                             prev = &curr.as_ref().next;
                         }

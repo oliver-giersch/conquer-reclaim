@@ -3,7 +3,6 @@ use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 use core::ptr;
 
-use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::{MarkedNonNull, MarkedPtr};
 
 use crate::retired::Retired;
@@ -13,7 +12,7 @@ use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim<T>, N: Unsigned> Unlinked<T, R, N> {
+impl<T, R: Reclaim<T>, const N: usize> Unlinked<T, R, N> {
     impl_from_ptr!();
     impl_from_non_null!();
 
@@ -57,12 +56,12 @@ impl<T, R: Reclaim<T>, N: Unsigned> Unlinked<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Debug for Unlinked<T, R, N> {
+impl<T, R, const N: usize> fmt::Debug for Unlinked<T, R, N> {
     impl_fmt_debug!(Unlinked);
 }
 
 /********** impl Pointer **************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Pointer for Unlinked<T, R, N> {
+impl<T, R, const N: usize> fmt::Pointer for Unlinked<T, R, N> {
     impl_fmt_pointer!();
 }

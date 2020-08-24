@@ -2,7 +2,6 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
 
-use conquer_pointer::typenum::Unsigned;
 use conquer_pointer::MarkedPtr;
 
 use crate::traits::Reclaim;
@@ -12,14 +11,14 @@ use crate::{Owned, Protected, Shared};
 // Storable
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Storable<T, R, N> {
+pub struct Storable<T, R, const N: usize> {
     inner: MarkedPtr<T, N>,
     _marker: PhantomData<R>,
 }
 
 /********** impl Clone ****************************************************************************/
 
-impl<T, R, N> Clone for Storable<T, R, N> {
+impl<T, R, const N: usize> Clone for Storable<T, R, N> {
     #[inline]
     fn clone(&self) -> Self {
         Self { inner: self.inner, _marker: PhantomData }
@@ -28,11 +27,11 @@ impl<T, R, N> Clone for Storable<T, R, N> {
 
 /********** impl Copy *****************************************************************************/
 
-impl<T, R, N> Copy for Storable<T, R, N> {}
+impl<T, R, const N: usize> Copy for Storable<T, R, N> {}
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R, N> Storable<T, R, N> {
+impl<T, R, const N: usize> Storable<T, R, N> {
     /// Creates a new `null` pointer.
     #[inline]
     pub const fn null() -> Self {
@@ -54,13 +53,13 @@ impl<T, R, N> Storable<T, R, N> {
 
 /********** impl Debug ****************************************************************************/
 
-impl<T, R, N: Unsigned> fmt::Debug for Storable<T, R, N> {
+impl<T, R, const N: usize> fmt::Debug for Storable<T, R, N> {
     impl_fmt_debug!(Storable);
 }
 
 /********** impl From (Owned) *********************************************************************/
 
-impl<T, R: Reclaim<T>, N: Unsigned> From<Owned<T, R, N>> for Storable<T, R, N> {
+impl<T, R: Reclaim<T>, const N: usize> From<Owned<T, R, N>> for Storable<T, R, N> {
     #[inline]
     fn from(owned: Owned<T, R, N>) -> Self {
         let storable = Self { inner: owned.inner.into(), _marker: PhantomData };
@@ -71,7 +70,7 @@ impl<T, R: Reclaim<T>, N: Unsigned> From<Owned<T, R, N>> for Storable<T, R, N> {
 
 /********** impl From (Protected) *****************************************************************/
 
-impl<T, R, N> From<Protected<'_, T, R, N>> for Storable<T, R, N> {
+impl<T, R, const N: usize> From<Protected<'_, T, R, N>> for Storable<T, R, N> {
     #[inline]
     fn from(protected: Protected<'_, T, R, N>) -> Self {
         Self { inner: protected.inner, _marker: PhantomData }
@@ -80,7 +79,7 @@ impl<T, R, N> From<Protected<'_, T, R, N>> for Storable<T, R, N> {
 
 /********** impl From (Shared) ********************************************************************/
 
-impl<T, R, N> From<Shared<'_, T, R, N>> for Storable<T, R, N> {
+impl<T, R, const N: usize> From<Shared<'_, T, R, N>> for Storable<T, R, N> {
     #[inline]
     fn from(shared: Shared<'_, T, R, N>) -> Self {
         Self { inner: shared.inner.into_marked_ptr(), _marker: PhantomData }
