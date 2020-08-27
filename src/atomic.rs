@@ -112,10 +112,9 @@ impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
     /// ```
     /// use std::sync::atomic::Ordering::Relaxed;
     ///
-    /// use reclaim::typenum::U0;
     /// use reclaim::leak::Guard;
     ///
-    /// type Atomic<T> = reclaim::leak::Atomic<T, U0>;
+    /// type Atomic<T> = reclaim::leak::Atomic<T, 0>;
     ///
     /// let atomic = Atomic::new("string");
     /// let guard = &Guard::new();
@@ -207,7 +206,7 @@ impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
         current: C,
         new: S,
         (success, failure): (Ordering, Ordering),
-    ) -> Result<C::Unlinked, CmpExchangeErr<S, T, R, N>>
+    ) -> Result<C::Unlinked, CompareExchangeErr<S, T, R, N>>
     where
         C: Into<Comparable<T, R, N>> + Unlink + Copy,
         S: Into<Storable<T, R, N>>,
@@ -219,7 +218,7 @@ impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
             self.inner
                 .compare_exchange(compare, store, (success, failure))
                 .map(|_| current.into_unlinked())
-                .map_err(|inner| CmpExchangeErr {
+                .map_err(|inner| CompareExchangeErr {
                     loaded: Unprotected { inner, _marker: PhantomData },
                     input: ManuallyDrop::into_inner(new),
                 })
@@ -233,7 +232,7 @@ impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
         current: C,
         new: S,
         (success, failure): (Ordering, Ordering),
-    ) -> Result<C::Unlinked, CmpExchangeErr<S, T, R, N>>
+    ) -> Result<C::Unlinked, CompareExchangeErr<S, T, R, N>>
     where
         C: Into<Comparable<T, R, N>> + Unlink + Copy,
         S: Into<Storable<T, R, N>>,
@@ -245,7 +244,7 @@ impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
             self.inner
                 .compare_exchange_weak(compare, store, (success, failure))
                 .map(|_| current.into_unlinked())
-                .map_err(|inner| CmpExchangeErr {
+                .map_err(|inner| CompareExchangeErr {
                     loaded: Unprotected { inner, _marker: PhantomData },
                     input: ManuallyDrop::into_inner(new),
                 })
@@ -360,7 +359,7 @@ impl<T, R: Reclaim<T>, const N: usize> fmt::Pointer for Atomic<T, R, N> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
-pub struct CmpExchangeErr<S, T, R, const N: usize> {
+pub struct CompareExchangeErr<S, T, R, const N: usize> {
     pub loaded: Unprotected<T, R, N>,
     pub input: S,
 }

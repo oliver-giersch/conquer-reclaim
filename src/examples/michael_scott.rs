@@ -47,13 +47,13 @@ impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcQueue<T, R> {
 impl<T, R: ReclaimRef<Node<T, R>> + Default> ArcQueue<T, R> {
     #[inline]
     pub fn new() -> Self {
-        Self::with_reclaim(Default::default())
+        Self::with_reclaimer(Default::default())
     }
 }
 
 impl<T, R: ReclaimRef<Node<T, R>>> ArcQueue<T, R> {
     #[inline]
-    pub fn with_reclaim(reclaimer: R) -> Self {
+    pub fn with_reclaimer(reclaimer: R) -> Self {
         let inner = Arc::new(Queue::<_, R>::with_reclaim(reclaimer));
         let thread_state = unsafe { inner.reclaim.build_thread_state_unchecked() };
         Self { inner, thread_state: ManuallyDrop::new(thread_state) }
@@ -203,13 +203,13 @@ impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for Queue<T, R> {
 impl<T, R: ReclaimRef<Node<T, R>>> Drop for Queue<T, R> {
     fn drop(&mut self) {
         unsafe {
-            // safety: As long as tail is left in place, no node can be freed twice,
-            // head node is always the sentinel
+            // SAFETY: As long as tail is left in place, no node can be freed
+            // twice, head node is always the sentinel
             let mut head = self.head.take().unwrap();
-            // safety: As long as tail is left in place, no node can be freed twice
+            // SAFETY: As long as tail is left in place, no node can be freed twice
             let mut curr = head.next.take();
             while let Some(mut node) = curr {
-                // safety: All nodes after the sentinel contained initialized memory
+                // SAFETY: All nodes after the sentinel contained initialized memory
                 node.elem.as_mut_ptr().drop_in_place();
                 curr = node.next.take();
             }

@@ -47,6 +47,70 @@ impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcQueue<T, R> {
     }
 }
 
+/*********** impl inherent ************************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>> + Default> ArcQueue<T, R> {
+    #[inline]
+    pub fn new() -> Self {
+        Self::with_reclaimer(Default::default())
+    }
+}
+
+impl<T, R: ReclaimRef<Node<T, R>>> ArcQueue<T, R> {
+    #[inline]
+    pub fn with_reclaimer(reclaimer: R) -> Self {
+        let inner = Arc::new(Queue::with_reclaim(reclaimer));
+        let thread_state = unsafe { inner.reclaim.build_thread_state_unchecked() };
+        Self { inner, thread_state: ManuallyDrop::new(thread_state) }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        unsafe { self.inner.is_empty_unchecked(&self.thread_state) }
+    }
+
+    #[inline]
+    pub fn push(&self, elem: T) {
+        unsafe { self.inner.push_unchecked(elem, &self.thread_state) }
+    }
+
+    #[inline]
+    pub fn pop(&self) -> Option<T> {
+        unsafe { self.inner.pop_unchecked(&self.thread_state) }
+    }
+}
+
+/********** impl Default **************************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for ArcQueue<T, R> {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/*********** impl Drop ****************************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>>> Drop for ArcQueue<T, R> {
+    #[inline]
+    fn drop(&mut self) {
+        unsafe { ManuallyDrop::drop(&mut self.thread_state) };
+    }
+}
+
+/********** impl From (Queue) *********************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>>> From<Queue<T, R>> for ArcQueue<T, R> {
+    #[inline]
+    fn from(queue: Queue<T, R>) -> Self {
+        let inner = Arc::new(queue);
+        let thread_state =
+            ManuallyDrop::new(unsafe { inner.reclaim.build_thread_state_unchecked() });
+
+        Self { inner, thread_state }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Queue
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -92,7 +156,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
     /// # Safety
     ///
     /// The `local_state` must have been derived from this queue's specific
-    /// [`Reclaim`] instance.
+    /// [`ReclaimRef`] instance.
     #[inline]
     pub unsafe fn is_empty_unchecked(&self, thread_state: &R::ThreadState) -> bool {
         let mut guard = thread_state.build_guard();
@@ -105,7 +169,7 @@ impl<T, R: ReclaimRef<Node<T, R>>> Queue<T, R> {
     /// # Safety
     ///
     /// The `local_state` must have been derived from this queue's specific
-    /// [`Reclaim`] instance.
+    /// [`ReclaimRef`] instance.
     #[inline]
     pub unsafe fn push_unchecked(&self, elem: T, thread_state: &R::ThreadState) {
         let elem = ManuallyDrop::new(elem);

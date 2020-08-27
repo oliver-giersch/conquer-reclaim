@@ -19,7 +19,7 @@ impl<T, R, const N: usize> Clone for Unprotected<T, R, N> {
 
 impl<T, R, const N: usize> Copy for Unprotected<T, R, N> {}
 
-/********** impl inherent (const) *****************************************************************/
+/********** impl inherent *************************************************************************/
 
 impl<T, R, const N: usize> Unprotected<T, R, N> {
     #[inline]
@@ -31,11 +31,7 @@ impl<T, R, const N: usize> Unprotected<T, R, N> {
     pub const fn cast<U>(self) -> Unprotected<U, R, N> {
         Unprotected { inner: self.inner.cast(), _marker: PhantomData }
     }
-}
 
-/********** impl inherent *************************************************************************/
-
-impl<T, R, const N: usize> Unprotected<T, R, N> {
     impl_from_ptr_for_nullable!();
     impl_from_non_null!();
 

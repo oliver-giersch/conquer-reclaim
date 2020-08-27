@@ -12,7 +12,7 @@ use crate::Unlinked;
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: Reclaim<T>, const N: usize> Unlinked<T, R, N> {
+impl<T, R, const N: usize> Unlinked<T, R, N> {
     impl_from_ptr!();
     impl_from_non_null!();
 
@@ -22,15 +22,6 @@ impl<T, R: Reclaim<T>, const N: usize> Unlinked<T, R, N> {
     }
 
     impl_common!();
-
-    #[inline]
-    pub fn into_retired(self) -> Retired<R> {
-        let ptr = self.inner.decompose_ptr();
-        unsafe {
-            let retired = <R as Reclaim<T>>::retire(ptr);
-            Retired::new_unchecked(retired)
-        }
-    }
 
     #[inline]
     pub unsafe fn take<U>(&self, take: impl (FnOnce(&T) -> &ManuallyDrop<U>)) -> U {
@@ -51,6 +42,17 @@ impl<T, R: Reclaim<T>, const N: usize> Unlinked<T, R, N> {
     #[inline]
     pub unsafe fn cast<U>(self) -> Unlinked<U, R, N> {
         Unlinked { inner: self.inner.cast(), _marker: PhantomData }
+    }
+}
+
+impl<T, R: Reclaim<T>, const N: usize> Unlinked<T, R, N> {
+    #[inline]
+    pub fn into_retired(self) -> Retired<R> {
+        let ptr = self.inner.decompose_ptr();
+        unsafe {
+            let retired = <R as Reclaim<T>>::retire(ptr);
+            Retired::new_unchecked(retired)
+        }
     }
 }
 

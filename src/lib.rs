@@ -30,7 +30,7 @@ use conquer_pointer::{MarkedNonNull, MarkedPtr};
 // public re-exports
 pub use conquer_pointer;
 
-pub use crate::atomic::{Atomic, CmpExchangeErr, Comparable, Storable};
+pub use crate::atomic::{Atomic, CompareExchangeErr, Comparable, Storable};
 pub use crate::erased::{DynHeader, DynReclaim};
 pub use crate::fused::{FusedGuard, FusedGuardRef};
 pub use crate::retired::Retired;
@@ -75,6 +75,9 @@ pub struct Owned<T, R: Reclaim<T>, const N: usize> {
 // Protected (impl in imp/protected.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A nullable shared pointer to a protected value that allows storing an
+/// additional pointer tag.
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub struct Protected<'g, T, R, const N: usize> {
     inner: MarkedPtr<T, N>,
     _marker: PhantomData<(Option<&'g T>, R)>,
@@ -84,7 +87,8 @@ pub struct Protected<'g, T, R, const N: usize> {
 // Shared (impl in imp/shared.rs)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// A local shared reference to a protected value that supports pointer tagging.
+/// A local shared reference to a protected value that allows storing an
+/// additional pointer tag.
 ///
 /// Instances of `Shared` are derived from guard types (see [`Protect`]) from
 /// which they inherit their lifetime dependence.
@@ -93,6 +97,7 @@ pub struct Protected<'g, T, R, const N: usize> {
 ///
 /// See the documentation for [`deref`][Shared::deref] for an explanation of the
 /// safety concerns involved in de-referencing a `Shared`.
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub struct Shared<'g, T, R, const N: usize> {
     inner: MarkedNonNull<T, N>,
     _marker: PhantomData<(&'g T, R)>,

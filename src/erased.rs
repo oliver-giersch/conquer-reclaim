@@ -9,7 +9,7 @@ type RetiredRecord<R, T> = crate::record::Record<<R as ReclaimBase>::Header, T>;
 /********** macros ********************************************************************************/
 
 #[macro_export]
-macro_rules! impl_dyn_erased_reclaim {
+macro_rules! impl_erased_reclaim {
     ($reclaim:ty, $header:ty) => {
         unsafe impl $crate::ReclaimBase for $reclaim {
             type Header = $header;

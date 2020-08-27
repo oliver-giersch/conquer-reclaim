@@ -32,8 +32,50 @@ type AssocGuard<T, R> = <<R as ReclaimRef<T>>::ThreadState as ReclaimThreadState
 
 pub struct HashSet<T, R: ReclaimRef<Node<T, R>>, S> {
     buckets: Box<[OrderedSet<T, R>]>,
-    reclaim: R,
+    reclaimer: R,
     hash_builder: S,
+}
+
+/*********** impl inherent ************************************************************************/
+
+impl<T, R, S> HashSet<T, R, S>
+where
+    T: Hash + Ord,
+    R: ReclaimRef<Node<T, R>>,
+    S: BuildHasher,
+{
+    #[inline]
+    pub fn with(hash_builder: S, buckets: usize, reclaimer: R) -> Self {
+        assert!(buckets > 0, "hash set needs to contain at least one bucket");
+        Self { buckets: (0..buckets).map(|_| OrderedSet::new()).collect(), reclaimer, hash_builder }
+    }
+
+    #[inline]
+    pub unsafe fn contains<Q>(&self, value: &Q, thread_state: &R::ThreadState) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        let mut guards = &mut Guards {
+            prev: thread_state.build_guard(),
+            curr: thread_state.build_guard(),
+            next: thread_state.build_guard(),
+        };
+
+        let set = &self.buckets[self.make_hash(value)];
+        set.remove_node(value, guards, thread_state)
+    }
+
+    #[inline]
+    fn make_hash<Q>(&self, value: &Q) -> usize
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        let mut state = self.hash_builder.build_hasher();
+        value.hash(&mut state);
+        (state.finish() % self.buckets.len() as u64) as usize
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -53,9 +95,36 @@ impl<'a, T, R: ReclaimRef<Node<T, R>>, S> HastSetRef<'a, T, R, S> {
         Self {
             hash_set,
             thread_state: ManuallyDrop::new(unsafe {
-                hash_set.reclaim.build_thread_state_unchecked()
+                hash_set.reclaimer.build_thread_state_unchecked()
             }),
         }
+    }
+
+    pub fn get<Q>(&mut self, value: &Q) -> Option<&T>
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        let mut guards = &mut Guards::new(&self.thread_state);
+        todo!()
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Node
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct Node<T, R: ReclaimRef<Self>> {
+    elem: T,
+    next: Atomic<Self, R::Reclaim>,
+}
+
+/********** impl inherent *************************************************************************/
+
+impl<T, R: ReclaimRef<Self>> Node<T, R> {
+    #[inline]
+    fn new(elem: T) -> Self {
+        Self { elem, next: Atomic::null() }
     }
 }
 
@@ -67,6 +136,19 @@ struct Guards<T, R: ReclaimRef<Node<T, R>>> {
     prev: AssocGuard<Node<T, R>, R>,
     curr: AssocGuard<Node<T, R>, R>,
     next: AssocGuard<Node<T, R>, R>,
+}
+
+/********** impl inherent *************************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>>> Guards<T, R> {
+    #[inline]
+    fn new(thread_state: &R::ThreadState) -> Self {
+        Self {
+            prev: thread_state.build_guard(),
+            curr: thread_state.build_guard(),
+            next: thread_state.build_guard(),
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -85,7 +167,13 @@ where
     R: ReclaimRef<Node<T, R>>,
 {
     const DELETE_TAG: usize = 0x1;
+    const ACQ_RLX: (Ordering, Ordering) = (Ordering::Acquire, Ordering::Relaxed);
     const REL_RLX: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
+
+    #[inline]
+    const fn new() -> Self {
+        Self { head: Atomic::null() }
+    }
 
     unsafe fn insert_node(
         &self,
@@ -107,6 +195,38 @@ where
                     };
                 }
                 _ => return false,
+            }
+        }
+    }
+
+    unsafe fn remove_node<Q>(
+        &self,
+        value: &Q,
+        guards: &mut Guards<T, R>,
+        thread_state: &R::ThreadState,
+    ) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Ord,
+    {
+        loop {
+            match self.find(value, guards, thread_state) {
+                FindResult::Insert { .. } => return false,
+                FindResult::Found { prev, curr, next } => {
+                    let next_tag = next.set_tag(Self::DELETE_TAG);
+                    if curr.as_ref().next.compare_exchange(next, next_tag, Self::ACQ_RLX).is_err() {
+                        continue;
+                    }
+
+                    match (*prev).compare_exchange(curr, next, Self::REL_RLX) {
+                        Ok(unlinked) => thread_state.retire_record(unlinked.into_retired()),
+                        Err(_) => {
+                            let _ = self.find(value, guards, thread_state);
+                        }
+                    }
+
+                    return true;
+                }
             }
         }
     }
@@ -197,22 +317,4 @@ enum FindResult<'g, T, R: ReclaimRef<Node<T, R>>> {
         prev: *const Atomic<Node<T, R>, R::Reclaim>,
         next: Protected<'g, Node<T, R>, R::Reclaim>,
     },
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Node
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub struct Node<T, R: ReclaimRef<Self>> {
-    elem: T,
-    next: Atomic<Self, R::Reclaim>,
-}
-
-/********** impl inherent *************************************************************************/
-
-impl<T, R: ReclaimRef<Self>> Node<T, R> {
-    #[inline]
-    fn new(elem: T) -> Self {
-        Self { elem, next: Atomic::null() }
-    }
 }

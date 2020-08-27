@@ -9,7 +9,7 @@ use conquer_pointer::MarkedPtr;
 
 use crate::alias::RetiredRecord;
 use crate::atomic::Atomic;
-use crate::fused::FusedGuardRef;
+use crate::fused::{FusedGuard, FusedGuardRef};
 use crate::{Maybe, NotEqual, Owned, Protected, Retired, Shared};
 
 /********** macros ********************************************************************************/
@@ -166,6 +166,19 @@ pub trait ProtectExt<T>: Protect<T> {
         fused: FusedGuardRef<'_, T, Self, N>,
     ) -> Shared<'g, T, Self::Reclaim, N>;
 
+    fn protect_fused<const N: usize>(
+        self,
+        atomic: &Atomic<T, Self::Reclaim, N>,
+        order: Ordering
+    ) -> Maybe<FusedGuard<T, Self, N>>;
+
+    fn protect_fused_if_equal<const N: usize>(
+        self,
+        atomic: &Atomic<T, Self::Reclaim, N>,
+        expected: MarkedPtr<T, N>,
+        order: Ordering
+    ) -> Result<Maybe<FusedGuard<T, Self, N>>, NotEqual>;
+
     fn protect_fused_ref<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
@@ -193,6 +206,29 @@ where
     ) -> Shared<'g, T, Self::Reclaim, N> {
         mem::swap(self, fused.guard);
         unsafe { Shared::from_marked_non_null(fused.shared) }
+    }
+
+    fn protect_fused<const N: usize>(
+        mut self,
+        atomic: &Atomic<T, Self::Reclaim, N>,
+        order: Ordering
+    ) -> Maybe<FusedGuard<T, Self, N>> {
+        match self.protect(atomic, order).shared() {
+            Maybe::Some(shared) => {
+                let shared = shared.inner;
+                Maybe::Some(FusedGuard { guard: self, shared })
+            },
+            Maybe::Null(tag) => Maybe::Null(tag)
+        }
+    }
+
+    fn protect_fused_if_equal<const N: usize>(
+        self,
+        atomic: &Atomic<T, Self::Reclaim, N>,
+        expected: MarkedPtr<T, N>,
+        order: Ordering
+    ) -> Result<Maybe<FusedGuard<T, Self, N>>, NotEqual> {
+        todo!()
     }
 
     #[inline]
