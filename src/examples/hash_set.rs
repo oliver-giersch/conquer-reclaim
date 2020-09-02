@@ -4,7 +4,6 @@ use core::cmp::{
     Ordering::{Equal, Greater},
 };
 use core::hash::{BuildHasher, Hash, Hasher};
-use core::marker::PhantomData;
 use core::mem::{self, ManuallyDrop};
 use core::sync::atomic::Ordering;
 
@@ -63,7 +62,10 @@ where
         };
 
         let set = &self.buckets[self.make_hash(value)];
-        set.remove_node(value, guards, thread_state)
+        match set.find(value, guards, thread_state) {
+            FindResult::Found { .. } => true,
+            _ => false,
+        }
     }
 
     #[inline]
@@ -84,29 +86,40 @@ where
 
 pub struct HastSetRef<'a, T, R: ReclaimRef<Node<T, R>>, S> {
     hash_set: &'a HashSet<T, R, S>,
-    thread_state: ManuallyDrop<R::ThreadState>,
+    thread_state: R::ThreadState,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<'a, T, R: ReclaimRef<Node<T, R>>, S> HastSetRef<'a, T, R, S> {
+impl<'a, T, R: ReclaimRef<Node<T, R>>, S> HastSetRef<'a, T, R, S>
+where
+    T: Hash + Ord,
+    R: ReclaimRef<Node<T, R>>,
+    S: BuildHasher,
+{
     #[inline]
     pub fn new(hash_set: &'a HashSet<T, R, S>) -> Self {
         Self {
             hash_set,
-            thread_state: ManuallyDrop::new(unsafe {
-                hash_set.reclaimer.build_thread_state_unchecked()
-            }),
+            thread_state: unsafe { hash_set.reclaimer.build_thread_state_unchecked() },
         }
     }
 
+    #[inline]
     pub fn get<Q>(&mut self, value: &Q) -> Option<&T>
     where
         T: Borrow<Q>,
         Q: Hash + Ord,
     {
         let mut guards = &mut Guards::new(&self.thread_state);
-        todo!()
+        let set = &self.hash_set.buckets[self.hash_set.make_hash(value)];
+
+        unsafe {
+            match set.find(value, guards, &self.thread_state) {
+                FindResult::Found { curr, .. } => Some(todo!()),
+                FindResult::Insert { .. } => None,
+            }
+        }
     }
 }
 
@@ -171,10 +184,11 @@ where
     const REL_RLX: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
 
     #[inline]
-    const fn new() -> Self {
+    fn new() -> Self {
         Self { head: Atomic::null() }
     }
 
+    #[inline]
     unsafe fn insert_node(
         &self,
         value: T,
@@ -182,23 +196,21 @@ where
         thread_state: &R::ThreadState,
     ) -> bool {
         let mut node = thread_state.alloc_owned(Node::new(value));
-        loop {
-            let elem = &node.elem;
-            match self.find(elem, guards, thread_state) {
-                FindResult::Insert { prev, next } => {
-                    node.next.store(next, Ordering::Relaxed);
-                    match (*prev).compare_exchange(next, node, Self::REL_RLX) {
-                        Ok(_) => return true,
-                        Err(e) => {
-                            node = e.input;
-                        }
-                    };
+
+        while let FindResult::Insert { prev, next } = self.find(&node.elem, guards, thread_state) {
+            node.next.store(next, Ordering::Relaxed);
+            match (*prev).compare_exchange(next, node, Self::REL_RLX) {
+                Ok(_) => return true,
+                Err(e) => {
+                    node = e.input;
                 }
-                _ => return false,
-            }
+            };
         }
+
+        false
     }
 
+    #[inline]
     unsafe fn remove_node<Q>(
         &self,
         value: &Q,
@@ -209,31 +221,28 @@ where
         T: Borrow<Q>,
         Q: Ord,
     {
-        loop {
-            match self.find(value, guards, thread_state) {
-                FindResult::Insert { .. } => return false,
-                FindResult::Found { prev, curr, next } => {
-                    let next_tag = next.set_tag(Self::DELETE_TAG);
-                    if curr.as_ref().next.compare_exchange(next, next_tag, Self::ACQ_RLX).is_err() {
-                        continue;
-                    }
+        while let FindResult::Found { prev, curr, next } = self.find(value, guards, thread_state) {
+            let next_tag = next.set_tag(Self::DELETE_TAG);
+            if curr.as_ref().next.compare_exchange(next, next_tag, Self::ACQ_RLX).is_err() {
+                continue;
+            }
 
-                    match (*prev).compare_exchange(curr, next, Self::REL_RLX) {
-                        Ok(unlinked) => thread_state.retire_record(unlinked.into_retired()),
-                        Err(_) => {
-                            let _ = self.find(value, guards, thread_state);
-                        }
-                    }
-
-                    return true;
+            match (*prev).compare_exchange(curr, next, Self::REL_RLX) {
+                Ok(unlinked) => thread_state.retire_record(unlinked.into_retired()),
+                Err(_) => {
+                    let _ = self.find(value, guards, thread_state);
                 }
             }
+
+            return true;
         }
+
+        false
     }
 
     unsafe fn find<'set, 'g, Q>(
         &'set self,
-        val: &Q,
+        value: &Q,
         guards: &'g mut Guards<T, R>,
         thread_state: &R::ThreadState,
     ) -> FindResult<'g, T, R>
@@ -272,7 +281,7 @@ where
                             // SAFETY: using `cast` on the returned values is an unfortunate escape
                             // hatch, which is required because the compiler is not smart enough to
                             // recognize that returning these values is actually sound
-                            match curr.as_ref().elem.borrow().cmp(val) {
+                            match curr.as_ref().elem.borrow().cmp(value) {
                                 Equal => {
                                     return FindResult::Found {
                                         prev,
@@ -291,7 +300,7 @@ where
 
                             // transfering the responsibility for protecting the current node to
                             // `prev` allows using `curr` to be used again in the next iteration
-                            let curr = guards.prev.adopt(fused);
+                            let curr = guards.prev.adopt_ref(fused);
                             prev = &curr.as_ref().next;
                         }
                     }

@@ -30,9 +30,9 @@ use conquer_pointer::{MarkedNonNull, MarkedPtr};
 // public re-exports
 pub use conquer_pointer;
 
-pub use crate::atomic::{Atomic, CompareExchangeErr, Comparable, Storable};
+pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
 pub use crate::erased::{DynHeader, DynReclaim};
-pub use crate::fused::{FusedGuard, FusedGuardRef};
+pub use crate::fused::{FusedProtected, FusedProtectedRef, FusedShared, FusedSharedRef};
 pub use crate::retired::Retired;
 pub use crate::traits::{
     Protect, ProtectExt, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState,
