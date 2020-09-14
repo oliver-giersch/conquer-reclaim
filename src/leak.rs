@@ -75,6 +75,11 @@ unsafe impl<T> ReclaimThreadState<T> for Leaking {
     type Guard = Guard;
 
     #[inline(always)]
+    fn derived_from(&self, _: &impl ReclaimRef<T, Reclaim = Self::Reclaim>) -> bool {
+        true
+    }
+
+    #[inline(always)]
     fn build_guard(&self) -> Self::Guard {
         Guard
     }

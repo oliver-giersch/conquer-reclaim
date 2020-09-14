@@ -4,81 +4,19 @@ use core::cmp::{
     Ordering::{Equal, Greater},
 };
 use core::hash::{BuildHasher, Hash, Hasher};
-use core::mem::{self, ManuallyDrop};
 use core::sync::atomic::Ordering;
+use std::ops::Deref;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "std")] {
-        use std::sync::Arc;
-    } else {
-        use alloc::boxed::Box;
-        use alloc::sync::Arc;
-    }
-}
-
-use crate::{Maybe, Protect, ProtectExt, ReclaimRef, ReclaimThreadState};
+use crate::{ProtectExt, ReclaimRef, ReclaimThreadState};
 
 type Atomic<T, R> = crate::Atomic<T, R, 1>;
 type Owned<T, R> = crate::Owned<T, R, 1>;
-type Protected<'g, T, R> = crate::Protected<'g, T, R, 1>;
-type Shared<'g, T, R> = crate::Shared<'g, T, R, 1>;
+
+type FusedProtected<T, G> = crate::fused::FusedProtected<T, G, 1>;
+type FusedShared<T, G> = crate::fused::FusedShared<T, G, 1>;
+type FusedSharedRef<'g, T, G> = crate::fused::FusedSharedRef<'g, T, G, 1>;
 
 type AssocGuard<T, R> = <<R as ReclaimRef<T>>::ThreadState as ReclaimThreadState<T>>::Guard;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// HashSet
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub struct HashSet<T, R: ReclaimRef<Node<T, R>>, S> {
-    buckets: Box<[OrderedSet<T, R>]>,
-    reclaimer: R,
-    hash_builder: S,
-}
-
-/*********** impl inherent ************************************************************************/
-
-impl<T, R, S> HashSet<T, R, S>
-where
-    T: Hash + Ord,
-    R: ReclaimRef<Node<T, R>>,
-    S: BuildHasher,
-{
-    #[inline]
-    pub fn with(hash_builder: S, buckets: usize, reclaimer: R) -> Self {
-        assert!(buckets > 0, "hash set needs to contain at least one bucket");
-        Self { buckets: (0..buckets).map(|_| OrderedSet::new()).collect(), reclaimer, hash_builder }
-    }
-
-    #[inline]
-    pub unsafe fn contains<Q>(&self, value: &Q, thread_state: &R::ThreadState) -> bool
-    where
-        T: Borrow<Q>,
-        Q: Hash + Ord,
-    {
-        let mut guards = &mut Guards {
-            prev: thread_state.build_guard(),
-            curr: thread_state.build_guard(),
-            next: thread_state.build_guard(),
-        };
-
-        let set = &self.buckets[self.make_hash(value)];
-        match set.find(value, guards, thread_state) {
-            FindResult::Found { .. } => true,
-            _ => false,
-        }
-    }
-
-    #[inline]
-    fn make_hash<Q>(&self, value: &Q) -> usize
-    where
-        T: Borrow<Q>,
-        Q: Hash + Ord,
-    {
-        let mut state = self.hash_builder.build_hasher();
-        value.hash(&mut state);
-        (state.finish() % self.buckets.len() as u64) as usize
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // HashSetRef
@@ -106,20 +44,142 @@ where
     }
 
     #[inline]
-    pub fn get<Q>(&mut self, value: &Q) -> Option<&T>
+    pub fn insert(&self, elem: T) -> bool {
+        unsafe { self.hash_set.insert(elem, &self.thread_state) }
+    }
+
+    #[inline]
+    pub fn remove<Q>(&self, value: &Q) -> bool
     where
         T: Borrow<Q>,
         Q: Hash + Ord,
     {
-        let mut guards = &mut Guards::new(&self.thread_state);
-        let set = &self.hash_set.buckets[self.hash_set.make_hash(value)];
+        unsafe { self.hash_set.remove(value, &self.thread_state) }
+    }
 
-        unsafe {
-            match set.find(value, guards, &self.thread_state) {
-                FindResult::Found { curr, .. } => Some(todo!()),
-                FindResult::Insert { .. } => None,
-            }
+    #[inline]
+    pub fn get<Q>(&self, value: &Q) -> Option<SharedRef<T, R>>
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        unsafe { self.hash_set.get(value, &self.thread_state) }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// HashSet
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct HashSet<T, R: ReclaimRef<Node<T, R>>, S> {
+    buckets: Box<[OrderedSet<T, R>]>,
+    reclaimer: R,
+    hash_builder: S,
+}
+
+/*********** impl inherent ************************************************************************/
+
+impl<T, R, S> HashSet<T, R, S>
+where
+    T: Hash + Ord,
+    R: ReclaimRef<Node<T, R>>,
+    S: BuildHasher,
+{
+    #[inline]
+    pub fn with(hash_builder: S, buckets: usize, reclaimer: R) -> Self {
+        assert!(buckets > 0, "hash set needs to contain at least one bucket");
+        Self { buckets: (0..buckets).map(|_| OrderedSet::new()).collect(), reclaimer, hash_builder }
+    }
+
+    #[inline]
+    pub unsafe fn insert(&self, elem: T, thread_state: &R::ThreadState) -> bool {
+        let mut prev = thread_state.build_guard();
+        let curr = thread_state.build_guard();
+        let next = thread_state.build_guard();
+
+        let node = thread_state.alloc_owned(Node { elem, next: Atomic::null() });
+        let elem = &node.elem;
+        let set = &self.buckets[self.make_hash(elem)];
+
+        return set.insert_node(node, thread_state, &mut prev, curr, next);
+    }
+
+    #[inline]
+    pub unsafe fn remove<Q>(&self, value: &Q, thread_state: &R::ThreadState) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        let mut prev = thread_state.build_guard();
+        let curr = thread_state.build_guard();
+        let next = thread_state.build_guard();
+
+        let set = &self.buckets[self.make_hash(value)];
+        set.remove_node(value, thread_state, &mut prev, curr, next)
+    }
+
+    #[inline]
+    pub unsafe fn contains<Q>(&self, value: &Q, thread_state: &R::ThreadState) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        let mut prev = thread_state.build_guard();
+        let curr = thread_state.build_guard();
+        let next = thread_state.build_guard();
+
+        let set = &self.buckets[self.make_hash(value)];
+        match set.find(value, thread_state, &mut prev, curr, next) {
+            FindResult::Found { .. } => true,
+            _ => false,
         }
+    }
+
+    #[inline]
+    pub unsafe fn get<Q>(&self, value: &Q, thread_state: &R::ThreadState) -> Option<SharedRef<T, R>>
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        let mut prev = thread_state.build_guard();
+        let curr = thread_state.build_guard();
+        let next = thread_state.build_guard();
+
+        let set = &self.buckets[self.make_hash(value)];
+        match set.find(value, thread_state, &mut prev, curr, next) {
+            FindResult::Found { curr, .. } => Some(SharedRef { shared: curr }),
+            FindResult::Insert { .. } => None,
+        }
+    }
+
+    #[inline]
+    fn make_hash<Q>(&self, value: &Q) -> usize
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        let mut state = self.hash_builder.build_hasher();
+        value.hash(&mut state);
+        (state.finish() % self.buckets.len() as u64) as usize
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// SharedRef
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct SharedRef<T, R: ReclaimRef<Node<T, R>>> {
+    shared: FusedShared<Node<T, R>, AssocGuard<Node<T, R>, R>>,
+}
+
+/********** impl Deref ****************************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>>> Deref for SharedRef<T, R> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        unsafe { &self.shared.as_shared().as_ref().elem }
     }
 }
 
@@ -130,38 +190,6 @@ where
 pub struct Node<T, R: ReclaimRef<Self>> {
     elem: T,
     next: Atomic<Self, R::Reclaim>,
-}
-
-/********** impl inherent *************************************************************************/
-
-impl<T, R: ReclaimRef<Self>> Node<T, R> {
-    #[inline]
-    fn new(elem: T) -> Self {
-        Self { elem, next: Atomic::null() }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Guards
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-struct Guards<T, R: ReclaimRef<Node<T, R>>> {
-    prev: AssocGuard<Node<T, R>, R>,
-    curr: AssocGuard<Node<T, R>, R>,
-    next: AssocGuard<Node<T, R>, R>,
-}
-
-/********** impl inherent *************************************************************************/
-
-impl<T, R: ReclaimRef<Node<T, R>>> Guards<T, R> {
-    #[inline]
-    fn new(thread_state: &R::ThreadState) -> Self {
-        Self {
-            prev: thread_state.build_guard(),
-            curr: thread_state.build_guard(),
-            next: thread_state.build_guard(),
-        }
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -180,6 +208,9 @@ where
     R: ReclaimRef<Node<T, R>>,
 {
     const DELETE_TAG: usize = 0x1;
+
+    const ACQ: Ordering = Ordering::Acquire;
+    const RLX: Ordering = Ordering::Relaxed;
     const ACQ_RLX: (Ordering, Ordering) = (Ordering::Acquire, Ordering::Relaxed);
     const REL_RLX: (Ordering, Ordering) = (Ordering::Release, Ordering::Relaxed);
 
@@ -191,123 +222,162 @@ where
     #[inline]
     unsafe fn insert_node(
         &self,
-        value: T,
-        guards: &mut Guards<T, R>,
+        mut node: Owned<Node<T, R>, R::Reclaim>,
         thread_state: &R::ThreadState,
+        prev_guard: &mut AssocGuard<Node<T, R>, R>,
+        mut curr_guard: AssocGuard<Node<T, R>, R>,
+        mut next_guard: AssocGuard<Node<T, R>, R>,
     ) -> bool {
-        let mut node = thread_state.alloc_owned(Node::new(value));
-
-        while let FindResult::Insert { prev, next } = self.find(&node.elem, guards, thread_state) {
-            node.next.store(next, Ordering::Relaxed);
-            match (*prev).compare_exchange(next, node, Self::REL_RLX) {
-                Ok(_) => return true,
-                Err(e) => {
-                    node = e.input;
+        loop {
+            let elem = &node.elem;
+            match self.find(elem, thread_state, prev_guard, curr_guard, next_guard) {
+                FindResult::Insert { prev, next, guard } => {
+                    node.next.store(next.as_protected(), Ordering::Relaxed);
+                    match prev.as_ref().compare_exchange(next.as_protected(), node, Self::REL_RLX) {
+                        Ok(_) => return true,
+                        Err(fail) => {
+                            node = fail.input;
+                            curr_guard = next.into_guard();
+                            next_guard = guard;
+                        }
+                    };
                 }
-            };
+                FindResult::Found { .. } => {
+                    return false;
+                }
+            }
         }
-
-        false
     }
 
     #[inline]
     unsafe fn remove_node<Q>(
         &self,
         value: &Q,
-        guards: &mut Guards<T, R>,
         thread_state: &R::ThreadState,
+        prev_guard: &mut AssocGuard<Node<T, R>, R>,
+        mut curr_guard: AssocGuard<Node<T, R>, R>,
+        mut next_guard: AssocGuard<Node<T, R>, R>,
     ) -> bool
     where
         T: Borrow<Q>,
         Q: Ord,
     {
-        while let FindResult::Found { prev, curr, next } = self.find(value, guards, thread_state) {
-            let next_tag = next.set_tag(Self::DELETE_TAG);
-            if curr.as_ref().next.compare_exchange(next, next_tag, Self::ACQ_RLX).is_err() {
-                continue;
-            }
+        loop {
+            match self.find(value, thread_state, prev_guard, curr_guard, next_guard) {
+                FindResult::Insert { .. } => return false,
+                FindResult::Found { prev, curr, next } => {
+                    let next_ref = &curr.as_shared().as_ref().next;
+                    let next_before = next.as_protected();
+                    let next_marked = next_before.set_tag(Self::DELETE_TAG);
 
-            match (*prev).compare_exchange(curr, next, Self::REL_RLX) {
-                Ok(unlinked) => thread_state.retire_record(unlinked.into_retired()),
-                Err(_) => {
-                    let _ = self.find(value, guards, thread_state);
+                    if next_ref.compare_exchange(next_before, next_marked, Self::ACQ_RLX).is_err() {
+                        curr_guard = curr.into_guard();
+                        next_guard = next.into_guard();
+                        continue;
+                    }
+
+                    let curr_ref = curr.as_shared();
+                    match prev.as_ref().compare_exchange(curr_ref, next_before, Self::REL_RLX) {
+                        Ok(unlinked) => thread_state.retire_record(unlinked.into_retired()),
+                        Err(_) => {
+                            curr_guard = curr.into_guard();
+                            next_guard = next.into_guard();
+                            let _ =
+                                self.find(value, thread_state, prev_guard, curr_guard, next_guard);
+                        }
+                    }
+
+                    return true;
                 }
             }
-
-            return true;
         }
-
-        false
     }
 
     unsafe fn find<'set, 'g, Q>(
         &'set self,
         value: &Q,
-        guards: &'g mut Guards<T, R>,
         thread_state: &R::ThreadState,
-    ) -> FindResult<'g, T, R>
+        prev_guard: &'g mut AssocGuard<Node<T, R>, R>,
+        mut curr_guard: AssocGuard<Node<T, R>, R>,
+        mut next_guard: AssocGuard<Node<T, R>, R>,
+    ) -> FindResult<'set, 'g, T, R>
     where
-        R: 'g,
-        T: Borrow<Q> + 'g,
+        T: Borrow<Q>,
         Q: Ord,
     {
         'retry: loop {
-            let mut prev = &self.head;
-            while let Maybe::Some(fused) = guards.curr.protect_fused_ref(prev, Ordering::Acquire) {
-                let (curr, tag) = fused.as_shared().split_tag();
-                if tag == Self::DELETE_TAG {
-                    continue 'retry;
-                }
-
-                // SAFETY: de-referencing curr is safe due to the `Acquire` ordering of its load
-                let next_ref = &curr.as_ref().next;
-
-                let expected = next_ref.load_raw(Ordering::Relaxed);
-                match next_ref.load_if_equal(expected, &mut guards.next, Ordering::Acquire) {
-                    Err(_) => continue 'retry,
-                    Ok(next) => {
-                        if prev.load_raw(Ordering::Relaxed) != curr.into_marked_ptr() {
+            let mut prev = Previous::Set(&self.head);
+            loop {
+                match curr_guard.protect_fused(prev.as_ref(), Self::ACQ).into_fused_shared() {
+                    Ok(curr_fused) => {
+                        let (curr, tag) = curr_fused.as_shared().split_tag();
+                        if tag == Self::DELETE_TAG {
+                            curr_guard = curr_fused.into_guard();
                             continue 'retry;
                         }
 
-                        let (next, tag) = next.split_tag();
-                        if tag == Self::DELETE_TAG {
-                            match prev.compare_exchange(curr, next, Self::REL_RLX) {
-                                // SAFETY: ...
-                                Ok(unlinked) => thread_state.retire_record(unlinked.into_retired()),
-                                Err(_) => continue 'retry,
-                            }
-                        } else {
-                            // SAFETY: using `cast` on the returned values is an unfortunate escape
-                            // hatch, which is required because the compiler is not smart enough to
-                            // recognize that returning these values is actually sound
-                            match curr.as_ref().elem.borrow().cmp(value) {
-                                Equal => {
-                                    return FindResult::Found {
-                                        prev,
-                                        curr: fused.into_shared().cast(),
-                                        next: next.cast(),
-                                    }
-                                }
-                                Greater => {
-                                    return FindResult::Insert {
-                                        prev,
-                                        next: fused.into_shared().into_protected().cast(),
-                                    }
-                                }
-                                _ => {}
-                            }
+                        let next_ref = &curr.as_ref().next;
 
-                            // transfering the responsibility for protecting the current node to
-                            // `prev` allows using `curr` to be used again in the next iteration
-                            let curr = guards.prev.adopt_ref(fused);
-                            prev = &curr.as_ref().next;
+                        let expected = next_ref.load_raw(Self::RLX);
+                        match next_guard.protect_fused_if_equal(next_ref, expected, Self::ACQ) {
+                            Err((next, _)) => {
+                                curr_guard = curr_fused.into_guard();
+                                next_guard = next;
+                                continue 'retry;
+                            }
+                            Ok(next_fused) => {
+                                if prev.as_ref().load_raw(Self::RLX) != curr.into_marked_ptr() {
+                                    curr_guard = curr_fused.into_guard();
+                                    next_guard = next_fused.into_guard();
+                                    continue 'retry;
+                                }
+
+                                let (next, tag) = next_fused.as_protected().split_tag();
+                                if tag == Self::DELETE_TAG {
+                                    match prev.as_ref().compare_exchange(curr, next, Self::REL_RLX)
+                                    {
+                                        Ok(unlinked) => {
+                                            thread_state.retire_record(unlinked.into_retired())
+                                        }
+                                        Err(_) => {
+                                            curr_guard = curr_fused.into_guard();
+                                            next_guard = next_fused.into_guard();
+                                            continue 'retry;
+                                        }
+                                    }
+                                } else {
+                                    match curr.as_ref().elem.borrow().cmp(value) {
+                                        Equal => {
+                                            return FindResult::Found {
+                                                prev,
+                                                curr: curr_fused,
+                                                next: next_fused,
+                                            }
+                                        }
+                                        Greater => {
+                                            return FindResult::Insert {
+                                                prev,
+                                                next: curr_fused.into_fused_protected(),
+                                                guard: next_fused.into_guard(),
+                                            }
+                                        }
+                                        _ => {}
+                                    };
+                                }
+
+                                // SAFETY: ..
+                                let prev_guard = &mut *(prev_guard as *mut _);
+                                let (prev_fused, free) =
+                                    FusedSharedRef::adopt(prev_guard, curr_fused);
+                                curr_guard = free;
+                                next_guard = next_fused.into_guard();
+                                prev = Previous::Guarded(prev_fused);
+                            }
                         }
                     }
+                    Err((next, _)) => return FindResult::Insert { prev, next, guard: next_guard },
                 }
             }
-
-            return FindResult::Insert { prev, next: Protected::null() };
         }
     }
 }
@@ -316,14 +386,36 @@ where
 // FindResult
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-enum FindResult<'g, T, R: ReclaimRef<Node<T, R>>> {
+enum FindResult<'set, 'g, T, R: ReclaimRef<Node<T, R>>> {
     Found {
-        prev: *const Atomic<Node<T, R>, R::Reclaim>,
-        curr: Shared<'g, Node<T, R>, R::Reclaim>,
-        next: Protected<'g, Node<T, R>, R::Reclaim>,
+        prev: Previous<'set, 'g, T, R>,
+        curr: FusedShared<Node<T, R>, AssocGuard<Node<T, R>, R>>,
+        next: FusedProtected<Node<T, R>, AssocGuard<Node<T, R>, R>>,
     },
     Insert {
-        prev: *const Atomic<Node<T, R>, R::Reclaim>,
-        next: Protected<'g, Node<T, R>, R::Reclaim>,
+        prev: Previous<'set, 'g, T, R>,
+        next: FusedProtected<Node<T, R>, AssocGuard<Node<T, R>, R>>,
+        guard: AssocGuard<Node<T, R>, R>,
     },
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Previous
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+enum Previous<'set, 'g, T, R: ReclaimRef<Node<T, R>>> {
+    Set(&'set Atomic<Node<T, R>, R::Reclaim>),
+    Guarded(FusedSharedRef<'g, Node<T, R>, AssocGuard<Node<T, R>, R>>),
+}
+
+/********** impl inherent *************************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>>> Previous<'_, '_, T, R> {
+    #[inline]
+    unsafe fn as_ref(&self) -> &Atomic<Node<T, R>, R::Reclaim> {
+        match self {
+            Previous::Set(head) => *head,
+            Previous::Guarded(shared) => &shared.as_shared().as_ref().next,
+        }
+    }
 }

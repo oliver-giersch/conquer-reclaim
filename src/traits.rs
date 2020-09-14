@@ -121,6 +121,7 @@ pub unsafe trait ReclaimThreadState<T> {
     type Reclaim: Reclaim<T>;
     type Guard: Protect<T, Reclaim = Self::Reclaim> + ProtectExt<T>;
 
+    fn derived_from(&self, reclaimer: &impl ReclaimRef<T, Reclaim = Self::Reclaim>) -> bool;
     fn build_guard(&self) -> Self::Guard;
     fn alloc_owned<const N: usize>(&self, value: T) -> Owned<T, Self::Reclaim, N>;
     unsafe fn retire_record(&self, retired: Retired<Self::Reclaim>);
@@ -179,7 +180,7 @@ pub trait ProtectExt<T>: Protect<T> {
         atomic: &Atomic<T, Self::Reclaim, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<FusedProtected<T, Self, N>, Self>;
+    ) -> Result<FusedProtected<T, Self, N>, (Self, NotEqual)>;
 
     fn protect_fused_ref<const N: usize>(
         &mut self,
@@ -246,7 +247,7 @@ where
         atomic: &Atomic<T, Self::Reclaim, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
-    ) -> Result<FusedProtected<T, Self, N>, Self> {
+    ) -> Result<FusedProtected<T, Self, N>, (Self, NotEqual)> {
         todo!()
     }
 
