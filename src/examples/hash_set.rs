@@ -4,8 +4,17 @@ use core::cmp::{
     Ordering::{Equal, Greater},
 };
 use core::hash::{BuildHasher, Hash, Hasher};
+use core::mem::ManuallyDrop;
+use core::ops::Deref;
 use core::sync::atomic::Ordering;
-use std::ops::Deref;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "std")] {
+        use std::sync::Arc;
+    } else {
+        use alloc::sync::Arc;
+    }
+}
 
 use crate::{ProtectExt, ReclaimRef, ReclaimThreadState};
 
@@ -17,6 +26,34 @@ type FusedShared<T, G> = crate::fused::FusedShared<T, G, 1>;
 type FusedSharedRef<'g, T, G> = crate::fused::FusedSharedRef<'g, T, G, 1>;
 
 type AssocGuard<T, R> = <<R as ReclaimRef<T>>::ThreadState as ReclaimThreadState<T>>::Guard;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// ArcHashSet
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct ArcHashSet<T, R: ReclaimRef<Node<T, R>>, S> {
+    inner: Arc<HashSet<T, R, S>>,
+    thread_state: ManuallyDrop<R::ThreadState>,
+}
+
+impl<T, R: ReclaimRef<Node<T, R>>, S> ArcHashSet<T, R, S>
+where
+    T: Hash + Ord,
+    R: ReclaimRef<Node<T, R>>,
+    S: BuildHasher,
+{
+    #[inline]
+    pub fn with(hash_builder: S, buckets: usize, reclaimer: R) -> Self {
+        let inner = Arc::new(HashSet::with(hash_builder, buckets, reclaimer));
+        let thread_state = unsafe { inner.reclaimer.build_thread_state_unchecked() };
+        Self { inner, thread_state: ManuallyDrop::new(thread_state) }
+    }
+
+    #[inline]
+    pub fn insert(&self, elem: T) -> bool {
+        unsafe { self.inner.insert(elem, &self.thread_state) }
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // HashSetRef
@@ -55,6 +92,15 @@ where
         Q: Hash + Ord,
     {
         unsafe { self.hash_set.remove(value, &self.thread_state) }
+    }
+
+    #[inline]
+    pub fn contains<Q>(&self, value: &Q) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Hash + Ord,
+    {
+        unsafe { self.hash_set.contains(value, &self.thread_state) }
     }
 
     #[inline]
@@ -367,8 +413,7 @@ where
 
                                 // SAFETY: ..
                                 let prev_guard = &mut *(prev_guard as *mut _);
-                                let (prev_fused, free) =
-                                    FusedSharedRef::adopt(prev_guard, curr_fused);
+                                let (prev_fused, free) = curr_fused.transfer_to_ref(prev_guard);
                                 curr_guard = free;
                                 next_guard = next_fused.into_guard();
                                 prev = Previous::Guarded(prev_fused);

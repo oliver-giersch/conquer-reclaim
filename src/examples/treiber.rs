@@ -1,9 +1,11 @@
+use core::fmt;
 use core::iter::{FromIterator, IntoIterator};
 use core::mem::{self, ManuallyDrop};
 use core::ptr;
+use core::sync::atomic::Ordering::{self, Acquire, Relaxed, Release};
+
 #[cfg(feature = "examples-debug")]
 use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::Ordering::{self, Acquire, Relaxed, Release};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "std")] {
@@ -13,13 +15,11 @@ cfg_if::cfg_if! {
     }
 }
 
-use conquer_pointer::MarkedPtr;
+use crate::conquer_pointer::MarkedPtr;
+use crate::{Maybe, ReclaimRef, ReclaimThreadState};
 
-use crate::typenum::U0;
-use crate::{AssocReclaim, Maybe, ReclaimLocalState, ReclaimRef, Retire};
-
-type Atomic<T, R> = crate::Atomic<T, R, U0>;
-type Owned<T, R> = crate::Owned<T, R, U0>;
+type Atomic<T, R> = crate::Atomic<T, R, 0>;
+type Owned<T, R> = crate::Owned<T, R, 0>;
 
 /********** global node drop counter (debug) ******************************************************/
 
@@ -31,24 +31,24 @@ pub static NODE_DROP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// An [`Arc`] based version of Treiber's lock-free stack.
-pub struct ArcStack<T, R: ReclaimRef> {
+pub struct ArcStack<T, R: ReclaimRef<Node<T, R>>> {
     inner: Arc<Stack<T, R>>,
-    reclaim_local_state: ManuallyDrop<R::LocalState>,
+    thread_state: ManuallyDrop<R::ThreadState>,
 }
 
 /*********** impl Send ****************************************************************************/
 
-unsafe impl<T, R: ReclaimRef> Send for ArcStack<T, R> {}
+unsafe impl<T, R: ReclaimRef<Node<T, R>>> Send for ArcStack<T, R> {}
 
 /*********** impl Clone ***************************************************************************/
 
-impl<T, R: ReclaimRef> Clone for ArcStack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Clone for ArcStack<T, R> {
     #[inline]
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
-            reclaim_local_state: ManuallyDrop::new(unsafe {
-                self.inner.reclaimer.build_local_state()
+            thread_state: ManuallyDrop::new(unsafe {
+                self.inner.reclaimer.build_thread_state_unchecked()
             }),
         }
     }
@@ -56,58 +56,67 @@ impl<T, R: ReclaimRef> Clone for ArcStack<T, R> {
 
 /*********** impl inherent ************************************************************************/
 
-impl<T, R: ReclaimRef + Default> ArcStack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>> + Default> ArcStack<T, R> {
     #[inline]
     pub fn new() -> Self {
         Self::with_reclaimer(Default::default())
     }
 }
 
-impl<T, R: ReclaimRef> ArcStack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> ArcStack<T, R> {
     #[inline]
     pub fn with_reclaimer(reclaimer: R) -> Self {
         let inner = Arc::new(Stack::<_, R>::with_reclaimer(reclaimer));
-        let reclaim_local_state = unsafe { inner.reclaimer.build_local_state() };
-        Self { inner, reclaim_local_state: ManuallyDrop::new(reclaim_local_state) }
+        let thread_state = unsafe { inner.reclaimer.build_thread_state_unchecked() };
+        Self { inner, thread_state: ManuallyDrop::new(thread_state) }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    #[inline]
+    pub fn push(&self, elem: T) {
+        unsafe { self.inner.push(elem, &self.thread_state) }
+    }
+
+    #[inline]
+    pub fn pop(&self) -> Option<T> {
+        unsafe { self.inner.pop_unchecked(&self.thread_state) }
     }
 
     #[inline]
     pub fn try_unwrap(self) -> Result<Stack<T, R>, Self> {
         // circumvents the restrictions on moving out of types implementing Drop.
-        let (inner, mut reclaim_local_state) = unsafe {
+        let (inner, mut thread_state) = unsafe {
             let inner = ptr::read(&self.inner);
-            let reclaim_local_state = ptr::read(&self.reclaim_local_state);
+            let thread_state = ptr::read(&self.thread_state);
             mem::forget(self);
-            (inner, reclaim_local_state)
+            (inner, thread_state)
         };
 
         Arc::try_unwrap(inner)
             .map(|stack| {
-                unsafe { ManuallyDrop::drop(&mut reclaim_local_state) };
+                unsafe { ManuallyDrop::drop(&mut thread_state) };
                 stack
             })
-            .map_err(|inner| Self { inner, reclaim_local_state })
+            .map_err(|inner| Self { inner, thread_state })
     }
 }
 
-impl<T, R: ReclaimRef<Item = Node<T, R>>> ArcStack<T, R>
-where
-    AssocReclaim<R>: Retire<Node<T, R>>,
-{
-    #[inline]
-    pub fn push(&self, elem: T) {
-        unsafe { self.inner.push(elem, &self.reclaim_local_state) }
-    }
+/********** impl Debug ****************************************************************************/
 
+impl<T, R: ReclaimRef<Node<T, R>> + Default> fmt::Debug for ArcStack<T, R> {
     #[inline]
-    pub fn pop(&self) -> Option<T> {
-        unsafe { self.inner.pop_unchecked(&self.reclaim_local_state) }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ArcStack {{ ... }}")
     }
 }
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: ReclaimRef + Default> Default for ArcStack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for ArcStack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -116,23 +125,74 @@ impl<T, R: ReclaimRef + Default> Default for ArcStack<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: ReclaimRef> Drop for ArcStack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Drop for ArcStack<T, R> {
     #[inline]
     fn drop(&mut self) {
-        // safety: Drop Local state before the `Arc`, because it may hold a pointer into it.
-        unsafe { ManuallyDrop::drop(&mut self.reclaim_local_state) };
+        // SAFETY: Drop Local state before the `Arc`, because it may hold a pointer into it.
+        unsafe { ManuallyDrop::drop(&mut self.thread_state) };
     }
 }
 
 /********** impl From (Stack) *********************************************************************/
 
-impl<T, R: ReclaimRef> From<Stack<T, R>> for ArcStack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> From<Stack<T, R>> for ArcStack<T, R> {
     #[inline]
     fn from(stack: Stack<T, R>) -> Self {
         let inner = Arc::new(stack);
-        let reclaim_local_state = ManuallyDrop::new(unsafe { inner.reclaimer.build_local_state() });
+        let thread_state =
+            ManuallyDrop::new(unsafe { inner.reclaimer.build_thread_state_unchecked() });
 
-        Self { inner, reclaim_local_state }
+        Self { inner, thread_state }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// StackRef
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// A thread-local reference to a [`Stack`].
+pub struct StackRef<'s, T, R: ReclaimRef<Node<T, R>>> {
+    stack: &'s Stack<T, R>,
+    thread_state: R::ThreadState,
+}
+
+/********** impl inherent *************************************************************************/
+
+impl<'s, T, R: ReclaimRef<Node<T, R>>> StackRef<'s, T, R> {
+    /// Creates a new [`StackRef`] from the given `stack` reference.
+    #[inline]
+    pub fn new(stack: &'s Stack<T, R>) -> Self {
+        Self { stack, thread_state: unsafe { stack.reclaimer.build_thread_state_unchecked() } }
+    }
+}
+
+impl<'s, T, R: ReclaimRef<Node<T, R>>> StackRef<'s, T, R> {
+    /// Returns `true` if the stack is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
+
+    /// Pushes `elem` to the top of the stack.
+    #[inline]
+    pub fn push(&self, elem: T) {
+        unsafe { self.stack.push(elem, &self.thread_state) };
+    }
+
+    /// Pops the element from the top of the stack or returns [`None`] if the
+    /// stack is empty.
+    #[inline]
+    pub fn pop(&self) -> Option<T> {
+        unsafe { self.stack.pop_unchecked(&self.thread_state) }
+    }
+}
+
+/********** impl Debug ****************************************************************************/
+
+impl<T, R: ReclaimRef<Node<T, R>>> fmt::Debug for StackRef<'_, T, R> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "StackRef {{ ... }}")
     }
 }
 
@@ -140,36 +200,41 @@ impl<T, R: ReclaimRef> From<Stack<T, R>> for ArcStack<T, R> {
 // Stack
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct Stack<T, R: ReclaimRef> {
+pub struct Stack<T, R: ReclaimRef<Node<T, R>>> {
     head: Atomic<Node<T, R>, R::Reclaim>,
     reclaimer: R,
 }
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: ReclaimRef + Default> Stack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Stack<T, R> {
     #[inline]
     pub fn new() -> Self {
         Self::with_reclaimer(Default::default())
     }
 }
 
-impl<T, R: ReclaimRef> Stack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Stack<T, R> {
     const RELEASE_CAS: (Ordering, Ordering) = (Release, Relaxed);
 
     #[inline]
     pub fn with_reclaimer(reclaimer: R) -> Self {
         Self { head: Atomic::null(), reclaimer }
     }
-}
 
-impl<T, R: ReclaimRef<Item = Node<T, R>>> Stack<T, R>
-where
-    AssocReclaim<R>: Retire<Node<T, R>>,
-{
     #[inline]
-    pub unsafe fn push(&self, elem: T, local_state: &R::LocalState) {
-        let mut node = local_state.alloc_owned(Node::new(elem));
+    pub fn as_ref(&self) -> StackRef<T, R> {
+        StackRef::new(self)
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.head.load_unprotected(Ordering::Relaxed).is_null()
+    }
+
+    #[inline]
+    pub unsafe fn push(&self, elem: T, thread_state: &R::ThreadState) {
+        let mut node = thread_state.alloc_owned(Node::new(elem));
         loop {
             let head = self.head.load_unprotected(Acquire);
             // safety: The store only becomes visible if the subsequent CAS succeeds, in which case
@@ -183,8 +248,8 @@ where
     }
 
     #[inline]
-    pub unsafe fn pop_unchecked(&self, local_state: &R::LocalState) -> Option<T> {
-        let mut guard = local_state.build_guard();
+    pub unsafe fn pop_unchecked(&self, thread_state: &R::ThreadState) -> Option<T> {
+        let mut guard = thread_state.build_guard();
         while let Maybe::Some(shared) = self.head.load(&mut guard, Acquire).shared() {
             // safety: `next` can be safely used as store argument for the subsequent CAS, since it
             // will only be actually stored if it succeeds, in which case the node could not have
@@ -192,7 +257,7 @@ where
             let next = shared.as_ref().next.load_unprotected(Relaxed).assume_storable();
             if let Ok(unlinked) = self.head.compare_exchange_weak(shared, next, Self::RELEASE_CAS) {
                 let elem = unlinked.take(|node| &node.elem);
-                local_state.retire_record(unlinked);
+                thread_state.retire_record(unlinked.into_retired());
                 return Some(elem);
             }
         }
@@ -203,7 +268,7 @@ where
 
 /********** impl Default **************************************************************************/
 
-impl<T, R: ReclaimRef + Default> Default for Stack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>> + Default> Default for Stack<T, R> {
     #[inline]
     fn default() -> Self {
         Self::new()
@@ -212,7 +277,7 @@ impl<T, R: ReclaimRef + Default> Default for Stack<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: ReclaimRef> Drop for Stack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Drop for Stack<T, R> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -227,7 +292,7 @@ impl<T, R: ReclaimRef> Drop for Stack<T, R> {
 
 /********** impl IntoIterator *********************************************************************/
 
-impl<T, R: ReclaimRef> IntoIterator for Stack<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> IntoIterator for Stack<T, R> {
     type Item = T;
     type IntoIter = IntoIter<T, R>;
 
@@ -239,10 +304,7 @@ impl<T, R: ReclaimRef> IntoIterator for Stack<T, R> {
 
 /********** impl FromIterator *********************************************************************/
 
-impl<T, R: ReclaimRef<Item = Node<T, R>> + Default> FromIterator<T> for Stack<T, R>
-where
-    AssocReclaim<R>: Retire<Node<T, R>>,
-{
+impl<T, R: ReclaimRef<Node<T, R>> + Default> FromIterator<T> for Stack<T, R> {
     #[inline]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let reclaimer = R::default();
@@ -262,49 +324,16 @@ where
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// StackRef
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub struct StackRef<'s, T, R: ReclaimRef> {
-    stack: &'s Stack<T, R>,
-    reclaimer_local_state: R::LocalState,
-}
-
-/********** impl inherent *************************************************************************/
-
-impl<'s, T, R: ReclaimRef> StackRef<'s, T, R> {
-    #[inline]
-    pub fn new(stack: &'s Stack<T, R>) -> Self {
-        Self { stack, reclaimer_local_state: unsafe { stack.reclaimer.build_local_state() } }
-    }
-}
-
-impl<'s, T, R: ReclaimRef<Item = Node<T, R>>> StackRef<'s, T, R>
-where
-    AssocReclaim<R>: Retire<Node<T, R>>,
-{
-    #[inline]
-    pub fn push(&self, elem: T) {
-        unsafe { self.stack.push(elem, &self.reclaimer_local_state) };
-    }
-
-    #[inline]
-    pub fn pop(&self) -> Option<T> {
-        unsafe { self.stack.pop_unchecked(&self.reclaimer_local_state) }
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 // IntoIter
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct IntoIter<T, R: ReclaimRef> {
+pub struct IntoIter<T, R: ReclaimRef<Node<T, R>>> {
     curr: Option<Owned<Node<T, R>, R::Reclaim>>,
 }
 
 /********** impl Iterator *************************************************************************/
 
-impl<T, R: ReclaimRef> Iterator for IntoIter<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Iterator for IntoIter<T, R> {
     type Item = T;
 
     #[inline]
@@ -319,7 +348,7 @@ impl<T, R: ReclaimRef> Iterator for IntoIter<T, R> {
 
 /********** impl Drop *****************************************************************************/
 
-impl<T, R: ReclaimRef> Drop for IntoIter<T, R> {
+impl<T, R: ReclaimRef<Node<T, R>>> Drop for IntoIter<T, R> {
     #[inline]
     fn drop(&mut self) {
         while let Some(_) = self.next() {}
@@ -331,7 +360,7 @@ impl<T, R: ReclaimRef> Drop for IntoIter<T, R> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A node type for storing a [`Stack`]'s individual elements.
-pub struct Node<T, R: ReclaimRef> {
+pub struct Node<T, R: ReclaimRef<Self>> {
     /// The node's element, which is only ever dropped as part of a node when a
     /// non-empty [`Stack`] itself is dropped.
     elem: ManuallyDrop<T>,
@@ -341,7 +370,7 @@ pub struct Node<T, R: ReclaimRef> {
 
 /********** impl inherent *************************************************************************/
 
-impl<T, R: ReclaimRef> Node<T, R> {
+impl<T, R: ReclaimRef<Self>> Node<T, R> {
     #[inline]
     fn new(elem: T) -> Self {
         Self { elem: ManuallyDrop::new(elem), next: Atomic::default() }
@@ -351,7 +380,7 @@ impl<T, R: ReclaimRef> Node<T, R> {
 /********** impl Drop *****************************************************************************/
 
 #[cfg(feature = "examples-debug")]
-impl<T, R: ReclaimRef> Drop for Node<T, R> {
+impl<T, R: ReclaimRef<Self>> Drop for Node<T, R> {
     #[inline]
     fn drop(&mut self) {
         NODE_DROP_COUNTER.fetch_add(1, Ordering::Relaxed);

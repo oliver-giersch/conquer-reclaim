@@ -52,10 +52,24 @@ macro_rules! impl_dyn_reclaim {
 // ReclaimBase (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// A trait representing the basic functionality of a memory reclamation scheme.
 pub unsafe trait ReclaimBase: Sync + Sized {
+    /// The header type that is allocated alongside every
+    /// [`Owned`][crate::Owned].
     type Header: Sized + 'static;
+    /// The type that can be retired and reclaimed by this reclamation scheme
+    /// implementation.
     type Retired: ?Sized;
 
+    /// Reclaims the `retired` record.
+    ///
+    /// # Safety
+    ///
+    /// `retired` must point at a record that was allocated through the same
+    /// memory reclamation type, was later retired and has not been reclaimed
+    /// previously.
+    /// The function must only be called, if the reclamation scheme can prove
+    /// that there are protected ([`Shared`]) references anymore in any thread.
     #[inline]
     unsafe fn reclaim(retired: *mut Self::Retired) {
         let record = RetiredRecord::<Self>::record_from_data(retired);
@@ -77,6 +91,12 @@ pub unsafe trait ReclaimBase: Sync + Sized {
 // Reclaim (trait)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// An extension for the [`ReclaimBase`] trait for implementing functionality of
+/// retiring memory records of the type it is implemented for.
+///
+/// In general, a typed reclamation mechanism will only implement this trait for
+/// its own type, whereas an untyped reclamation mechanism will implement this
+/// trait for any type.
 pub unsafe trait Reclaim<T>: ReclaimBase {
     unsafe fn retire(ptr: *mut T) -> *mut Self::Retired;
 }
@@ -164,11 +184,6 @@ pub unsafe trait Protect<T>: Clone {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub trait ProtectExt<T>: Protect<T> {
-    fn adopt_ref<const N: usize>(
-        &mut self,
-        fused: FusedSharedRef<'_, T, Self, N>,
-    ) -> Shared<T, Self::Reclaim, N>;
-
     fn protect_fused<const N: usize>(
         self,
         atomic: &Atomic<T, Self::Reclaim, N>,
@@ -186,7 +201,7 @@ pub trait ProtectExt<T>: Protect<T> {
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         order: Ordering,
-    ) -> Maybe<FusedSharedRef<T, Self, N>>;
+    ) -> FusedProtectedRef<T, Self, N>;
 
     fn protect_fused_ref_if_equal<const N: usize>(
         &mut self,
@@ -194,31 +209,6 @@ pub trait ProtectExt<T>: Protect<T> {
         expected: MarkedPtr<T, N>,
         order: Ordering,
     ) -> Result<FusedProtectedRef<T, Self, N>, NotEqual>;
-
-    /*fn adopt_fused_shared_ref<'g, const N: usize>(
-        &'g mut self,
-        fused: FusedSharedRef<'_, T, Self, N>,
-    ) -> Shared<'g, T, Self::Reclaim, N>;
-
-    fn adopt_ref<'g, const N: usize>(
-        &'g mut self,
-        fused: FusedGuardRef<'_, T, Self, N>,
-    ) -> Shared<'g, T, Self::Reclaim, N>;
-
-    fn adopt_fused(self, fused: FusedGuardRef<'_, T, Self, N>) -> FusedGuard<T, Self, N>;
-
-    fn protect_fused_ref<const N: usize>(
-        &mut self,
-        atomic: &Atomic<T, Self::Reclaim, N>,
-        order: Ordering,
-    ) -> Maybe<FusedGuardRef<T, Self, N>>;
-
-    fn protect_fused_ref_if_equal<const N: usize>(
-        &mut self,
-        atomic: &Atomic<T, Self::Reclaim, N>,
-        expected: MarkedPtr<T, N>,
-        order: Ordering,
-    ) -> Result<Maybe<FusedGuardRef<T, Self, N>>, NotEqual>;*/
 }
 
 /********** blanket impl **************************************************************************/
@@ -227,44 +217,49 @@ impl<T, G> ProtectExt<T> for G
 where
     G: Protect<T>,
 {
-    fn adopt_ref<const N: usize>(
-        &mut self,
-        fused: FusedSharedRef<'_, T, Self, N>,
-    ) -> Shared<T, Self::Reclaim, N> {
-        todo!()
-    }
-
+    #[inline]
     fn protect_fused<const N: usize>(
-        self,
+        mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         order: Ordering,
     ) -> FusedProtected<T, Self, N> {
-        todo!()
+        let protected = self.protect(atomic, order).into_marked_ptr();
+        FusedProtected { guard: self, protected }
     }
 
+    #[inline]
     fn protect_fused_if_equal<const N: usize>(
-        self,
+        mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
     ) -> Result<FusedProtected<T, Self, N>, (Self, NotEqual)> {
-        todo!()
+        match self.protect(atomic, order).into_marked_ptr() {
+            protected if protected == expected => Ok(FusedProtected { guard: self, protected }),
+            _ => Err((self, NotEqual)),
+        }
     }
 
+    #[inline]
     fn protect_fused_ref<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         order: Ordering,
-    ) -> Maybe<FusedSharedRef<T, Self, N>> {
-        todo!()
+    ) -> FusedProtectedRef<T, Self, N> {
+        let protected = self.protect(atomic, order).into_marked_ptr();
+        FusedProtectedRef { guard: self, protected }
     }
 
+    #[inline]
     fn protect_fused_ref_if_equal<const N: usize>(
         &mut self,
         atomic: &Atomic<T, Self::Reclaim, N>,
         expected: MarkedPtr<T, N>,
         order: Ordering,
     ) -> Result<FusedProtectedRef<T, Self, N>, NotEqual> {
-        todo!()
+        match self.protect(atomic, order).into_marked_ptr() {
+            protected if protected == expected => Ok(FusedProtectedRef { guard: self, protected }),
+            _ => Err(NotEqual),
+        }
     }
 }
