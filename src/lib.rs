@@ -3,7 +3,7 @@
 #![feature(min_const_generics, set_ptr_value)]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 // #![warn(missing_docs)] todo: re-enable
-#[cfg(not(feature = "std"))]
+
 extern crate alloc;
 
 #[macro_use]
@@ -11,12 +11,12 @@ mod macros;
 
 #[cfg(feature = "examples")]
 pub mod examples;
+pub mod fused;
 pub mod leak;
 
 mod alias;
 mod atomic;
 mod erased;
-mod fused;
 mod imp;
 mod record;
 mod retired;
@@ -32,7 +32,6 @@ pub use conquer_pointer;
 
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
 pub use crate::erased::{DynHeader, DynReclaim};
-pub use crate::fused::{FusedProtected, FusedProtectedRef, FusedShared, FusedSharedRef};
 pub use crate::retired::Retired;
 pub use crate::traits::{
     Protect, ProtectExt, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState,
@@ -61,9 +60,9 @@ pub enum Maybe<P> {
 /// its associated [`Reclaim`] type.
 /// The type guarantees that, on allocation, the instance of `T` will be
 /// preceded by a [`Default`] initialized instance of the associated
-/// [`Header`][Reclaim::Header] type.
+/// [`Header`][ReclaimBase::Header] type.
 ///
-/// When an [`Owned`] instance goes out scope, the entire [`Record`] will be
+/// When an [`Owned`] instance goes out scope, the entire record will be
 /// de-allocated.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub struct Owned<T, R: Reclaim<T>, const N: usize> {
@@ -95,7 +94,7 @@ pub struct Protected<'g, T, R, const N: usize> {
 /// Like regular shared references (`&'g T`) they can be trivially copied,
 /// cloned, de-referenced and can not be `null`.
 ///
-/// See the documentation for [`deref`][Shared::deref] for an explanation of the
+/// See the documentation for [`deref`][Shared::as_ref] for an explanation of the
 /// safety concerns involved in de-referencing a `Shared`.
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 pub struct Shared<'g, T, R, const N: usize> {
@@ -113,8 +112,8 @@ pub struct Shared<'g, T, R, const N: usize> {
 ///
 /// Under the assumption that no other thread is able to load a *new* reference
 /// to the same value as the `Unlinked` after it being unlinked, it is sound to
-/// [`retire`][Unlinked::retire] the value, which hands it over to the
-/// [`Reclaim`] mechanism for eventual de-allocation.
+/// [`into_retired`][Unlinked::into_retired] the value, which hands it over to
+/// the [`Reclaim`] mechanism for eventual de-allocation.
 /// This is for instance always the case if the [`Atomic`] was a unique pointer
 /// to the unlinked value.
 ///
@@ -151,6 +150,6 @@ pub struct Unprotected<T, R, const N: usize> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// A type for indicating that a [`load_if_equal`][Atomic::load_if_equal]
-/// operation failed due to the loaded value not matching the expected one.
+/// operation failed due to the actual value not matching the expected one.
 #[derive(Debug, Default, Copy, Clone, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct NotEqual;

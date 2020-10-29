@@ -99,7 +99,7 @@ impl<'g, T, R: Reclaim<T>, const N: usize> Shared<'g, T, R, N> {
     ///
     /// # Safety
     ///
-    /// See [`deref`][Shared::deref] for an explanation of the safety concerns
+    /// See [`as_ref`][Shared::as_ref] for an explanation of the safety concerns
     /// involved in de-referencing a [`Shared`].
     #[inline]
     pub unsafe fn decompose_ref(self) -> (&'g T, usize) {

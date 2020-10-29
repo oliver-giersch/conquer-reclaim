@@ -59,8 +59,7 @@ impl<T, R, const N: usize> Atomic<T, R, N> {
 /********** impl inherent *************************************************************************/
 
 impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
-    /// Allocates a new [`Record`][crate::Record] for `val` and stores an
-    /// [`Atomic`] pointer to it.
+    /// Creates a new [`Atomic`] for the given `owned` record.
     #[inline]
     pub fn new(owned: Owned<T, R, N>) -> Self {
         Self::from(owned)
@@ -70,15 +69,11 @@ impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
     ///
     /// # Safety
     ///
-    /// The given `ptr` argument must be a pointer to a valid heap allocated
-    /// instance of `T` that was allocated as part of a
-    /// [`Record`][rec], e.g., through an [`Owned`].
+    /// The given `ptr` must point at a live memory record that had been
+    /// allocated as a record for the same [`ReclaimBase`][crate::ReclaimBase].
     ///
-    /// Note, that creating more than one [`Atomic`] from the same
-    /// [`Record`][rec] has implications for other methods such as
-    /// [`take`][Atomic::take].
-    ///
-    /// [rec]: crate::Record
+    /// Note, that creating more than one [`Atomic`] from the same record has
+    /// implications for other methods such as [`take`][Atomic::take].
     #[inline]
     pub unsafe fn from_raw(ptr: MarkedPtr<T, N>) -> Self {
         Self { inner: AtomicMarkedPtr::new(ptr), _marker: PhantomData }
@@ -107,7 +102,7 @@ impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
     ///
     /// Commonly, this is likely going to be used in conjunction with
     /// [`load_if_equal`][Atomic::load_if_equal] or
-    /// [`acquire_if_equal`][Protect::acquire_if_equal].
+    /// [`acquire_if_equal`][Protect::protect_if_equal].
     ///
     /// ```
     /// use std::sync::atomic::Ordering::Relaxed;
@@ -269,8 +264,8 @@ impl<T, R: Reclaim<T>, const N: usize> Atomic<T, R, N> {
     /// If the loaded value is non-null, the value is guaranteed to be protected
     /// from reclamation during the lifetime of `guard`.
     ///
-    /// `load` takes an [`Ordering`][ordering] argument, which describes the
-    /// memory ordering of this operation.
+    /// `load` takes an [`Ordering`] argument, which describes the memory
+    /// ordering of this operation.
     ///
     /// # Panics
     ///

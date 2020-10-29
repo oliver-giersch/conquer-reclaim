@@ -45,8 +45,8 @@ where
 }
 
 impl<T, R: Reclaim<T>, const N: usize> Owned<T, R, N> {
-    /// Creates a new heap-allocated [`Record<T>`](Record) with the given
-    /// `header` and `value` and returns an owning handle to it.
+    /// Creates a new heap-allocated record with the given `header` and `value`
+    /// and returns an owning handle to the allocated `value`.
     ///
     /// # Safety
     ///
