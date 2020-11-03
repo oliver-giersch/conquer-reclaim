@@ -1,6 +1,6 @@
 [package]
 name = "conquer-reclaim"
-description = "generic interface for lock-free memory reclamation"
+description = "abstract generic interface for lock-free memory reclamation"
 version = "0.4.0"
 authors = ["Oliver Giersch"]
 license = "MIT/Apache-2.0"
@@ -9,7 +9,7 @@ repository = "https://github.com/oliver-giersch/conquer-reclaim.git"
 documentation = "https://docs.rs/conquer-reclaim"
 keywords = ["concurrent", "lock-free", "memory", "reclamation"]
 edition = "2018"
-exclude = ["/.travis.yml"]
+exclude = []
 
 [features]
 default = ["std"]

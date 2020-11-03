@@ -1,3 +1,6 @@
+//! Wrapper types for *fusing* guard instances and protected pointers or
+//! references.
+
 use core::convert::TryInto;
 use core::fmt;
 use core::mem;
@@ -6,28 +9,39 @@ use conquer_pointer::{MarkedNonNull, MarkedPtr, Null};
 
 use crate::{Protect, Protected, Shared};
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // FusedProtected
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
+/// An owned guard fused with a (nullable) [`Protected`] pointer.
 pub struct FusedProtected<T, G, const N: usize> {
+    /// The owned guard.
     pub(crate) guard: G,
+    /// The protected pointer.
     pub(crate) protected: MarkedPtr<T, N>,
 }
 
 /********** impl inherent *************************************************************************/
 
 impl<T, G: Protect<T>, const N: usize> FusedProtected<T, G, N> {
+    /// Creates a new [`FusedProtected`] from `guard` with a `null` pointer.
     #[inline]
     pub fn null(guard: G) -> Self {
         Self { guard, protected: MarkedPtr::null() }
     }
 
+    /// Returns the inner [`Protected`] pointer.
     #[inline]
     pub fn as_protected(&self) -> Protected<T, G::Reclaim, N> {
         unsafe { Protected::from_marked_ptr(self.protected) }
     }
 
+    /// Attempts to convert `self` into a [`FusedShared`].
+    ///
+    /// # Errors
+    ///
+    /// Fails, if `self` holds a `null` pointer, in which case an [`Err`] with
+    /// the original value and a [`Null`] instance is returned.
     #[inline]
     pub fn into_fused_shared(self) -> Result<FusedShared<T, G, N>, (Self, Null)> {
         match self.protected.try_into() {
@@ -36,6 +50,8 @@ impl<T, G: Protect<T>, const N: usize> FusedProtected<T, G, N> {
         }
     }
 
+    /// Consumes `self` and returns the contained guard instance, forfeiting its
+    /// currently protected value.
     #[inline]
     pub fn into_guard(self) -> G {
         self.guard
@@ -51,10 +67,11 @@ impl<T, G: Protect<T>, const N: usize> fmt::Debug for FusedProtected<T, G, N> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // FusedProtectedRef
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
+/// A borrowed guard fused with a (nullable) [`Protected`] pointer.
 pub struct FusedProtectedRef<'g, T, G, const N: usize> {
     pub(crate) guard: &'g mut G,
     pub(crate) protected: MarkedPtr<T, N>,
@@ -63,16 +80,19 @@ pub struct FusedProtectedRef<'g, T, G, const N: usize> {
 /********** impl inherent *************************************************************************/
 
 impl<'g, T, G: Protect<T>, const N: usize> FusedProtectedRef<'g, T, G, N> {
+    /// Creates a new [`FusedProtectedRef`] from `guard` with a `null` pointer.
     #[inline]
     pub fn null(guard: &'g mut G) -> Self {
         Self { guard, protected: MarkedPtr::null() }
     }
 
+    /// Returns the inner [`Protected`] pointer.
     #[inline]
     pub fn as_protected(&self) -> Protected<T, G::Reclaim, N> {
         unsafe { Protected::from_marked_ptr(self.protected) }
     }
 
+    /// Attempts to convert `self` into a [`FusedSharedRef`].
     #[inline]
     pub fn into_fused_shared_ref(self) -> Result<FusedSharedRef<'g, T, G, N>, (Self, Null)> {
         match self.protected.try_into() {
@@ -96,10 +116,11 @@ impl<T, G: Protect<T>, const N: usize> fmt::Debug for FusedProtectedRef<'_, T, G
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // FusedShared
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
+/// An owned guard fused with a (non-nullable) [`Shared`] reference.
 pub struct FusedShared<T, G, const N: usize> {
     pub(crate) guard: G,
     pub(crate) shared: MarkedNonNull<T, N>,
@@ -116,7 +137,7 @@ impl<T, G: Protect<T>, const N: usize> FusedShared<T, G, N> {
 
     #[inline]
     pub fn as_shared(&self) -> Shared<T, G::Reclaim, N> {
-        todo!()
+        unsafe { Shared::from_marked_non_null(self.shared) }
     }
 
     #[inline]
@@ -151,9 +172,9 @@ impl<T, G: Protect<T>, const N: usize> fmt::Debug for FusedShared<T, G, N> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // FusedSharedRef
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 pub struct FusedSharedRef<'g, T, G, const N: usize> {
     pub(crate) guard: &'g mut G,
@@ -165,7 +186,7 @@ pub struct FusedSharedRef<'g, T, G, const N: usize> {
 impl<'g, T, G: Protect<T>, const N: usize> FusedSharedRef<'g, T, G, N> {
     #[inline]
     pub fn as_shared(&self) -> Shared<T, G::Reclaim, N> {
-        todo!()
+        unsafe { Shared::from_marked_non_null(self.shared) }
     }
 
     #[inline]
@@ -187,7 +208,7 @@ impl<'g, T, G: Protect<T>, const N: usize> FusedSharedRef<'g, T, G, N> {
 
     #[inline]
     pub fn into_shared(self) -> Shared<'g, T, G::Reclaim, N> {
-        todo!()
+        unsafe { Shared::from_marked_non_null(self.shared) }
     }
 
     #[inline]
