@@ -1,3 +1,5 @@
+//! Internal helper macros for implementing common functionality.
+
 macro_rules! default_null {
     () => {
         #[inline]

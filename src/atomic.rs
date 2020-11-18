@@ -17,9 +17,9 @@ pub use self::store::Storable;
 
 use self::compare::Unlink;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // Atomic
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 /// An atomic marked pointer type to a heap allocated value similar to
 /// [`AtomicPtr`](core::sync::atomic::AtomicPtr).
@@ -349,12 +349,19 @@ impl<T, R: Reclaim<T>, const N: usize> fmt::Pointer for Atomic<T, R, N> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// CmpExchangeErr
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
+// CompareExchangeErr
+// *************************************************************************************************
 
+/// An error type indicating a failed *compare-and-swap* operation.
+///
+/// In case the *swap* part of the operation (the `new` argument) is an owning
+/// type like [`Owned`] it must be retrieved from the `input`, otherwise it will
+/// be dropped and de-allocated when the `CompareExchangeErr` goes out off scope.
 #[derive(Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CompareExchangeErr<S, T, R, const N: usize> {
+    /// The actually present value, as loaded by the CAS operation.
     pub loaded: Unprotected<T, R, N>,
+    /// The value used as input for the CAS operation (`new` parameter).
     pub input: S,
 }

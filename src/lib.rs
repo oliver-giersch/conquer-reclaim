@@ -9,6 +9,8 @@ extern crate alloc;
 #[macro_use]
 mod macros;
 
+#[macro_use]
+pub mod erased;
 #[cfg(feature = "examples")]
 pub mod examples;
 pub mod fused;
@@ -16,7 +18,6 @@ pub mod leak;
 
 mod alias;
 mod atomic;
-mod erased;
 mod imp;
 mod record;
 mod retired;
@@ -31,15 +32,14 @@ use conquer_pointer::{MarkedNonNull, MarkedPtr};
 pub use conquer_pointer;
 
 pub use crate::atomic::{Atomic, Comparable, CompareExchangeErr, Storable};
-pub use crate::erased::{DynHeader, DynReclaim};
 pub use crate::retired::Retired;
 pub use crate::traits::{
     Protect, ProtectExt, Reclaim, ReclaimBase, ReclaimRef, ReclaimThreadState,
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // Maybe
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 /// An [`Option`]-like wrapper for non-nullable marked pointer or
 /// reference types that can also represent marked `null` pointers.
@@ -49,9 +49,9 @@ pub enum Maybe<P> {
     Null(usize),
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // Owned (impl in imp/owned.rs)
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 /// A smart pointer type for heap allocation similar to
 /// [`Box`][alloc::boxed::Box].
@@ -70,9 +70,9 @@ pub struct Owned<T, R: Reclaim<T>, const N: usize> {
     _marker: PhantomData<(T, R)>,
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // Protected (impl in imp/protected.rs)
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 /// A nullable shared pointer to a protected value that allows storing an
 /// additional pointer tag.
@@ -82,9 +82,9 @@ pub struct Protected<'g, T, R, const N: usize> {
     _marker: PhantomData<(Option<&'g T>, R)>,
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // Shared (impl in imp/shared.rs)
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 /// A local shared reference to a protected value that allows storing an
 /// additional pointer tag.
@@ -102,9 +102,9 @@ pub struct Shared<'g, T, R, const N: usize> {
     _marker: PhantomData<(&'g T, R)>,
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // Unlinked (impl in imp/unlinked.rs)
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 /// A reference type for a value that has been removed from its previous
 /// location as the result of a [`swap`][swap] or [`compare_exchange`][cex]
@@ -126,9 +126,9 @@ pub struct Unlinked<T, R, const N: usize> {
     _marker: PhantomData<(T, R)>,
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // Unprotected (impl in imp/unprotected.rs)
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 /// A marked pointer to a value loaded from an [`Atomic`] that is not protected
 /// from reclamation and can hence not be safely de-referenced in general.
@@ -145,9 +145,9 @@ pub struct Unprotected<T, R, const N: usize> {
     _marker: PhantomData<R>,
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 // NotEqual
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// *************************************************************************************************
 
 /// A type for indicating that a [`load_if_equal`][Atomic::load_if_equal]
 /// operation failed due to the actual value not matching the expected one.
